@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.sumarize.voiceindo.audio.AudioRecorder
+import kotlinx.coroutines.Job
 import com.sumarize.voiceindo.data.db.AppDatabase
 import com.sumarize.voiceindo.data.db.SummaryEntity
 import com.sumarize.voiceindo.data.repository.SummaryRepository
@@ -46,6 +47,7 @@ class MainViewModel(
 
     private var stt: SherpaOnnxSTT? = null
     private var llm: GemmaLLM? = null
+    private var recordingJob: Job? = null
 
     init {
         initModels()
@@ -74,13 +76,19 @@ class MainViewModel(
 
     fun hasAudioPermission(): Boolean = recorder.hasPermission()
 
+    fun stopRecording() {
+        recordingJob?.cancel()
+        recordingJob = null
+        _state.update { it.copy(step = ProcessingStep.IDLE, transcript = "", summary = "", streamingSummary = "", errorMessage = null) }
+    }
+
     fun startRecordAndProcess() {
         val current = _state.value.step
         if (current == ProcessingStep.RECORDING ||
             current == ProcessingStep.TRANSCRIBING ||
             current == ProcessingStep.SUMMARIZING) return
 
-        viewModelScope.launch {
+        recordingJob = viewModelScope.launch {
             _state.update {
                 it.copy(
                     step = ProcessingStep.RECORDING,
@@ -143,6 +151,8 @@ class MainViewModel(
                         streamingSummary = ""
                     )
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e  // normal cancellation — state already reset by stopRecording()
             } catch (e: Exception) {
                 _state.update {
                     it.copy(

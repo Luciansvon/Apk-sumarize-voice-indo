@@ -99,7 +99,7 @@ class AudioRecorder(private val context: Context) {
             // Phase 2: main recording with VAD
             var silenceStart: Long? = null
 
-            while (true) {
+            while (coroutineContext.isActive) {
                 val read = recorder.read(buffer, 0, FRAMES_PER_BUFFER, AudioRecord.READ_BLOCKING)
                 if (read <= 0) continue
 

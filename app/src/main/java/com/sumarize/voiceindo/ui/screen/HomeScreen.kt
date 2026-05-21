@@ -78,6 +78,7 @@ fun HomeScreen(
                             if (viewModel.hasAudioPermission()) viewModel.startRecordAndProcess()
                             else permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                         }
+                        ProcessingStep.RECORDING -> viewModel.stopRecording()
                         ProcessingStep.DONE, ProcessingStep.ERROR -> viewModel.reset()
                         else -> {}
                     }
