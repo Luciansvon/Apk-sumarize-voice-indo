@@ -51,21 +51,22 @@ jobs:
 
       - name: Build debug APK
         run: |
+          # GitHub Actions uses bash -eo pipefail by default.
+          # Using || { } so the diagnostic block runs even when gradle fails.
           set -o pipefail
-          ./gradlew assembleDebug --no-daemon 2>&1 | tee /tmp/build.log
-          EXIT=${PIPESTATUS[0]}
-          if [ $EXIT -ne 0 ]; then
+          ./gradlew assembleDebug --no-daemon --no-build-cache 2>&1 | tee /tmp/build.log || {
             echo ""
-            echo "=== KOTLIN COMPILER ERRORS ==="
+            echo "=== KOTLIN COMPILER ERRORS (e: lines) ==="
             grep "^e: " /tmp/build.log || echo "(no e: lines found)"
             echo ""
-            echo "=== KSP / ANNOTATION PROCESSOR ERRORS ==="
-            grep -i "error:\|ksp\|schema\|annotation" /tmp/build.log | grep -v "^>" | head -30 || true
+            echo "=== KSP / ROOM / ANNOTATION ERRORS ==="
+            grep -iE "error:|ksp|schema|annotation|unresolved" /tmp/build.log \
+              | grep -v "^>" | head -40 || echo "(none found)"
             echo ""
-            echo "=== LAST 40 LINES OF BUILD LOG ==="
-            tail -40 /tmp/build.log
-          fi
-          exit $EXIT
+            echo "=== LAST 60 LINES OF BUILD LOG ==="
+            tail -60 /tmp/build.log
+            exit 1
+          }
 
       - name: Upload build log on failure
         if: failure()
