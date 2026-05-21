@@ -5,9 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-// exportSchema = true: schema di-commit ke git di folder /app/schemas
-// Kalau ganti struktur tabel di versi selanjutnya, tambah kelas Migration_X_Y di sini
-@Database(entities = [SummaryEntity::class], version = 1, exportSchema = true)
+@Database(entities = [SummaryEntity::class], version = 1, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun summaryDao(): SummaryDao
 

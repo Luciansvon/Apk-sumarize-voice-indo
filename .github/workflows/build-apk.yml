@@ -52,13 +52,18 @@ jobs:
       - name: Build debug APK
         run: |
           set -o pipefail
-          ./gradlew assembleDebug --info --no-daemon 2>&1 | tee /tmp/build.log
+          ./gradlew assembleDebug --no-daemon 2>&1 | tee /tmp/build.log
           EXIT=${PIPESTATUS[0]}
           if [ $EXIT -ne 0 ]; then
-            echo "=== BUILD FAILED — First 80 lines ==="
-            head -80 /tmp/build.log
-            echo "=== BUILD FAILED — Error section ==="
-            grep -A 20 "FAILURE\|What went wrong\|Task.*FAILED\|error:" /tmp/build.log | head -60
+            echo ""
+            echo "=== KOTLIN COMPILER ERRORS ==="
+            grep "^e: " /tmp/build.log || echo "(no e: lines found)"
+            echo ""
+            echo "=== KSP / ANNOTATION PROCESSOR ERRORS ==="
+            grep -i "error:\|ksp\|schema\|annotation" /tmp/build.log | grep -v "^>" | head -30 || true
+            echo ""
+            echo "=== LAST 40 LINES OF BUILD LOG ==="
+            tail -40 /tmp/build.log
           fi
           exit $EXIT
 
