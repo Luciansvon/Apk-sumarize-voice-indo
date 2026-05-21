@@ -19,6 +19,7 @@ class GemmaLLM(private val context: Context, private val modelFile: File) {
             .setModelPath(modelFile.absolutePath)
             .setMaxTokens(1024)
             .setMaxTopK(40)
+            .setPreferredBackend(LlmInference.Backend.CPU)
             .build()
         llm = LlmInference.createFromOptions(context, options)
         Log.i(TAG, "Gemma 3 1B initialized")
