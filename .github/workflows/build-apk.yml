@@ -50,7 +50,10 @@ jobs:
           restore-keys: ${{ runner.os }}-gradle-
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon --no-build-cache 2>&1 | tee /tmp/build.log
+        id: build
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --no-daemon --no-build-cache 2>&1 | tee /tmp/build.log
 
       - name: Show Kotlin compiler errors
         if: failure()
@@ -70,6 +73,7 @@ jobs:
           retention-days: 7
 
       - name: Rename APK
+        if: steps.build.outcome == 'success'
         run: |
           mkdir -p artifacts
           cp app/build/outputs/apk/debug/app-debug.apk \
