@@ -17,3 +17,6 @@ app/src/main/assets/models/
 
 # Gradle wrapper jar (regenerate with gradle wrapper)
 gradle/wrapper/gradle-wrapper.jar
+# Misplaced wrapper files generated in root by system gradle
+/gradle-wrapper.jar
+/gradle-wrapper.properties
