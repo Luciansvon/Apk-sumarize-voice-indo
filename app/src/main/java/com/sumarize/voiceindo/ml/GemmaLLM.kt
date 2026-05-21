@@ -14,16 +14,11 @@ class GemmaLLM(private val context: Context, private val modelFile: File) {
 
     private var llm: LlmInference? = null
 
-    @Volatile private var resultSink: ((String?, Boolean) -> Unit)? = null
-
     fun initialize() {
         val options = LlmInference.LlmInferenceOptions.builder()
             .setModelPath(modelFile.absolutePath)
             .setMaxTokens(1024)
             .setMaxTopK(40)
-            .setResultListener { partialResult, done ->
-                resultSink?.invoke(partialResult, done)
-            }
             .build()
         llm = LlmInference.createFromOptions(context, options)
         Log.i(TAG, "Gemma 3 1B initialized")
@@ -32,16 +27,11 @@ class GemmaLLM(private val context: Context, private val modelFile: File) {
     fun summarizeStreaming(transcript: String): Flow<String> = callbackFlow {
         val llmInstance = llm ?: error("LLM not initialized — call initialize() first")
 
-        val mySink: (String?, Boolean) -> Unit = { partial, done ->
+        llmInstance.generateResponseAsync(buildPrompt(transcript)) { partial, done ->
             if (!partial.isNullOrEmpty()) trySend(partial)
             if (done) close()
         }
-        resultSink = mySink
-
-        llmInstance.generateResponseAsync(buildPrompt(transcript))
-        // Hanya null-kan resultSink kalau kita masih pemiliknya —
-        // cegah awaitClose dari call lama menimpa resultSink milik call baru
-        awaitClose { if (resultSink === mySink) resultSink = null }
+        awaitClose { }
     }
 
     private fun buildPrompt(transcript: String): String {
@@ -66,7 +56,6 @@ $trimmed
     fun isReady(): Boolean = llm != null
 
     fun release() {
-        resultSink = null
         llm?.close()
         llm = null
         Log.i(TAG, "Gemma LLM released")
