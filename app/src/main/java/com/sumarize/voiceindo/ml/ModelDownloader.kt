@@ -19,9 +19,9 @@ private const val TAG = "ModelDownloader"
 private const val WHISPER_URL =
     "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-base.int8.tar.bz2"
 
-// Gemma 3 1B int4 LiteRT (.task) — public mirror via HuggingFace
+// Gemma 3 1B int4 LiteRT (.task) — public mirror (no token required)
 private const val GEMMA_URL =
-    "https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/gemma3-1b-it-int4.task"
+    "https://huggingface.co/AfiOne/gemma3-1b-it-int4.task/resolve/main/gemma3-1b-it-int4.task"
 
 data class DownloadProgress(
     val bytesDownloaded: Long,
@@ -66,10 +66,10 @@ class ModelDownloader(private val context: Context) {
         }
     }.flowOn(Dispatchers.IO)
 
-    fun downloadGemma(hfToken: String = ""): Flow<DownloadResult> = flow {
+    fun downloadGemma(): Flow<DownloadResult> = flow {
         try {
             gemmaModelFile.parentFile?.mkdirs()
-            downloadFile(GEMMA_URL, gemmaModelFile, hfToken) { progress ->
+            downloadFile(GEMMA_URL, gemmaModelFile) { progress ->
                 emit(DownloadResult.Progress(progress))
             }
             emit(DownloadResult.Success)
@@ -82,7 +82,6 @@ class ModelDownloader(private val context: Context) {
     private suspend fun downloadFile(
         urlString: String,
         dest: File,
-        hfToken: String = "",
         onProgress: suspend (DownloadProgress) -> Unit
     ) {
         dest.parentFile?.mkdirs()
@@ -91,7 +90,6 @@ class ModelDownloader(private val context: Context) {
             connectTimeout = 30_000
             readTimeout = 60_000
             instanceFollowRedirects = true
-            if (hfToken.isNotBlank()) setRequestProperty("Authorization", "Bearer $hfToken")
             connect()
         }
 
