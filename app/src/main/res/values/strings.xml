@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sumarize Voice</string>
+    <string name="record">Rekam</string>
+    <string name="stop">Berhenti</string>
+    <string name="history">Riwayat</string>
+    <string name="transcription">Transkripsi</string>
+    <string name="summary">Ringkasan</string>
+    <string name="delete">Hapus</string>
+    <string name="cancel">Batal</string>
+    <string name="processing">Memproses…</string>
+    <string name="ready">Siap merekam</string>
+    <string name="mic_permission_needed">Izin mikrofon diperlukan</string>
+</resources>

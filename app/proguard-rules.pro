@@ -1,0 +1,5 @@
+-keep class com.k2fsa.sherpa.onnx.** { *; }
+-keep class com.google.mediapipe.** { *; }
+-keep class com.sumarize.voiceindo.data.db.** { *; }
+-dontwarn org.tensorflow.**
+-dontwarn com.google.flatbuffers.**

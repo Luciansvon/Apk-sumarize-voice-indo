@@ -1,0 +1,71 @@
+package com.sumarize.voiceindo.ml
+
+import android.content.Context
+import android.util.Log
+import com.google.mediapipe.tasks.genai.llminference.LlmInference
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import java.io.File
+
+private const val TAG = "GemmaLLM"
+
+class GemmaLLM(private val context: Context, private val modelFile: File) {
+
+    private var llm: LlmInference? = null
+
+    fun initialize() {
+        val options = LlmInference.LlmInferenceOptions.builder()
+            .setModelPath(modelFile.absolutePath)
+            .setMaxTokens(1024)
+            .setMaxTopK(40)
+            .setTemperature(0.5f)
+            .setRandomSeed(42)
+            .build()
+        llm = LlmInference.createFromOptions(context, options)
+        Log.i(TAG, "Gemma 3 1B initialized")
+    }
+
+    fun summarizeStreaming(transcript: String): Flow<String> = callbackFlow {
+        val llmInstance = llm ?: error("LLM not initialized — call initialize() first")
+        val prompt = buildPrompt(transcript)
+
+        llmInstance.generateResponseAsync(prompt) { partialResult, done ->
+            if (partialResult != null) trySend(partialResult)
+            if (done) close()
+        }
+        awaitClose()
+    }
+
+    suspend fun summarize(transcript: String): String {
+        val llmInstance = llm ?: error("LLM not initialized — call initialize() first")
+        return llmInstance.generateResponse(buildPrompt(transcript))
+    }
+
+    private fun buildPrompt(transcript: String): String {
+        val trimmed = transcript.take(3000)
+        return """<start_of_turn>user
+Kamu adalah asisten ringkasan dalam bahasa Indonesia. Buat ringkasan singkat dan padat dari transkripsi suara berikut.
+
+Format output:
+**Ringkasan:** (1-2 kalimat inti)
+**Poin Penting:**
+- (poin 1)
+- (poin 2)
+- (poin 3, jika ada)
+
+Transkripsi:
+$trimmed
+<end_of_turn>
+<start_of_turn>model
+"""
+    }
+
+    fun isReady(): Boolean = llm != null
+
+    fun release() {
+        llm?.close()
+        llm = null
+        Log.i(TAG, "Gemma LLM released")
+    }
+}
