@@ -66,10 +66,10 @@ class ModelDownloader(private val context: Context) {
         }
     }.flowOn(Dispatchers.IO)
 
-    fun downloadGemma(): Flow<DownloadResult> = flow {
+    fun downloadGemma(hfToken: String = ""): Flow<DownloadResult> = flow {
         try {
             gemmaModelFile.parentFile?.mkdirs()
-            downloadFile(GEMMA_URL, gemmaModelFile) { progress ->
+            downloadFile(GEMMA_URL, gemmaModelFile, hfToken) { progress ->
                 emit(DownloadResult.Progress(progress))
             }
             emit(DownloadResult.Success)
@@ -82,6 +82,7 @@ class ModelDownloader(private val context: Context) {
     private suspend fun downloadFile(
         urlString: String,
         dest: File,
+        hfToken: String = "",
         onProgress: suspend (DownloadProgress) -> Unit
     ) {
         dest.parentFile?.mkdirs()
@@ -90,6 +91,7 @@ class ModelDownloader(private val context: Context) {
             connectTimeout = 30_000
             readTimeout = 60_000
             instanceFollowRedirects = true
+            if (hfToken.isNotBlank()) setRequestProperty("Authorization", "Bearer $hfToken")
             connect()
         }
 
