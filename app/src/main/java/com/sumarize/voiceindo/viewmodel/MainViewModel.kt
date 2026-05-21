@@ -13,7 +13,6 @@ import com.sumarize.voiceindo.ml.GemmaLLM
 import com.sumarize.voiceindo.ml.ModelDownloader
 import com.sumarize.voiceindo.ml.OpenRouterClient
 import com.sumarize.voiceindo.ml.SherpaOnnxSTT
-import com.sumarize.voiceindo.ml.TranscriptResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -67,7 +66,13 @@ class MainViewModel(
     private fun observePreferences() {
         viewModelScope.launch {
             prefs.isOnlineMode.collect { online ->
-                _state.update { it.copy(isOnlineMode = online) }
+                _state.update { cur ->
+                    cur.copy(
+                        isOnlineMode = online,
+                        // Online mode tidak perlu model lokal sama sekali
+                        isModelsReady = if (online) true else (stt?.isReady() == true)
+                    )
+                }
             }
         }
     }
@@ -84,14 +89,21 @@ class MainViewModel(
         viewModelScope.launch { prefs.setModel(m) }
     }
 
+    fun setSttModel(m: String) {
+        viewModelScope.launch { prefs.setSttModel(m) }
+    }
+
     suspend fun getApiKey(): String = prefs.apiKey.first()
 
     suspend fun getSelectedModel(): String = prefs.selectedModel.first()
+
+    suspend fun getSelectedSttModel(): String = prefs.sttModel.first()
 
     fun isGemmaReady(): Boolean = downloader.isGemmaReady()
 
     private fun initModels() {
         viewModelScope.launch(Dispatchers.IO) {
+            val online = prefs.isOnlineMode.first()
             try {
                 if (downloader.isWhisperReady()) {
                     val sttInstance = SherpaOnnxSTT(downloader.whisperModelDir)
@@ -103,12 +115,16 @@ class MainViewModel(
                     llmInstance.initialize()
                     llm = llmInstance
                 }
-                // Online mode hanya butuh Whisper (STT). Offline butuh keduanya.
-                val whisperReady = stt?.isReady() == true
-                val ready = whisperReady  // Gemma diperiksa saat summarize, bukan saat init
+                val ready = if (online) true else (stt?.isReady() == true)
                 _state.update { it.copy(isModelsReady = ready) }
             } catch (e: Exception) {
-                _state.update { it.copy(errorMessage = "Gagal inisialisasi model: ${e.message}") }
+                // Online mode tetap siap walau inisialisasi local model gagal
+                _state.update {
+                    it.copy(
+                        isModelsReady = online,
+                        errorMessage = if (!online) "Gagal inisialisasi model: ${e.message}" else null
+                    )
+                }
             }
         }
     }
@@ -116,7 +132,7 @@ class MainViewModel(
     fun hasAudioPermission(): Boolean = recorder.hasPermission()
 
     fun stopRecording() {
-        recorder.requestStop()  // signal loop to exit; coroutine continues to transcribe
+        recorder.requestStop()
     }
 
     fun startRecordAndProcess() {
@@ -130,6 +146,11 @@ class MainViewModel(
             current == ProcessingStep.SUMMARIZING) return
 
         viewModelScope.launch {
+            val onlineMode = prefs.isOnlineMode.first()
+            val apiKey = prefs.apiKey.first()
+            val selectedModel = prefs.selectedModel.first()
+            val sttModel = prefs.sttModel.first()
+
             isTranscribingChunk = false
             _state.update {
                 it.copy(
@@ -144,7 +165,6 @@ class MainViewModel(
                 )
             }
 
-            // Timer coroutine
             val timerJob = launch {
                 while (_state.value.step == ProcessingStep.RECORDING) {
                     delay(1000L)
@@ -155,27 +175,32 @@ class MainViewModel(
             }
 
             try {
-                val result = withContext(Dispatchers.IO) {
-                    recorder.recordUntilSilence(
-                        onChunkAvailable = { chunkSamples ->
-                            if (!isTranscribingChunk) {
-                                isTranscribingChunk = true
-                                viewModelScope.launch(Dispatchers.IO) {
-                                    try {
-                                        val text = stt?.transcribe(chunkSamples)?.plainText?.trim() ?: ""
-                                        if (text.isNotBlank()) {
-                                            _state.update { s ->
-                                                val joined = if (s.liveTranscript.isBlank()) text
-                                                             else "${s.liveTranscript} $text"
-                                                s.copy(liveTranscript = joined)
-                                            }
+                // Live preview hanya tersedia di offline mode (butuh Whisper lokal)
+                val chunkHandler: ((FloatArray) -> Unit)? = if (!onlineMode && stt != null) {
+                    { chunkSamples ->
+                        if (!isTranscribingChunk) {
+                            isTranscribingChunk = true
+                            viewModelScope.launch(Dispatchers.IO) {
+                                try {
+                                    val text = stt?.transcribe(chunkSamples)?.plainText?.trim() ?: ""
+                                    if (text.isNotBlank()) {
+                                        _state.update { s ->
+                                            val joined = if (s.liveTranscript.isBlank()) text
+                                                         else "${s.liveTranscript} $text"
+                                            s.copy(liveTranscript = joined)
                                         }
-                                    } finally {
-                                        isTranscribingChunk = false
                                     }
+                                } finally {
+                                    isTranscribingChunk = false
                                 }
                             }
-                        },
+                        }
+                    }
+                } else null
+
+                val result = withContext(Dispatchers.IO) {
+                    recorder.recordUntilSilence(
+                        onChunkAvailable = chunkHandler,
                         onAmplitudeChange = { amp ->
                             _state.update { it.copy(currentAmplitude = amp) }
                         }
@@ -185,30 +210,11 @@ class MainViewModel(
                 _state.update { it.copy(currentAmplitude = 0f) }
 
                 val durationSec = (result.durationMs / 1000).toInt()
-
                 _state.update { it.copy(step = ProcessingStep.TRANSCRIBING, durationSeconds = durationSec) }
-                val transcriptResult: TranscriptResult = withContext(Dispatchers.IO) {
-                    stt?.transcribe(result.samples)
-                        ?: error("STT belum siap")
-                }
 
-                if (transcriptResult.plainText.isBlank()) {
-                    _state.update {
-                        it.copy(
-                            step = ProcessingStep.ERROR,
-                            errorMessage = "Tidak ada suara yang terdeteksi. Coba lagi."
-                        )
-                    }
-                    return@launch
-                }
-
-                // timestampedText untuk tampilan user; plainText ke LLM agar tidak ada noise "[0:03]"
-                _state.update { it.copy(transcript = transcriptResult.timestampedText, step = ProcessingStep.SUMMARIZING) }
-
-                val sb = StringBuilder()
-                val onlineMode = prefs.isOnlineMode.first()
-                val apiKey = prefs.apiKey.first()
-                val selectedModel = prefs.selectedModel.first()
+                // STT: online = API, offline = Whisper lokal
+                val plainText: String
+                val displayText: String
 
                 if (onlineMode) {
                     if (apiKey.isBlank()) {
@@ -220,14 +226,42 @@ class MainViewModel(
                         }
                         return@launch
                     }
+                    val transcribed = withContext(Dispatchers.IO) {
+                        OpenRouterClient(apiKey, selectedModel).transcribeAudio(result.samples, sttModel)
+                    }
+                    plainText = transcribed
+                    displayText = transcribed
+                } else {
+                    val transcriptResult = withContext(Dispatchers.IO) {
+                        stt?.transcribe(result.samples) ?: error("STT lokal belum siap")
+                    }
+                    plainText = transcriptResult.plainText
+                    displayText = transcriptResult.timestampedText
+                }
+
+                if (plainText.isBlank()) {
+                    _state.update {
+                        it.copy(
+                            step = ProcessingStep.ERROR,
+                            errorMessage = "Tidak ada suara yang terdeteksi. Coba lagi."
+                        )
+                    }
+                    return@launch
+                }
+
+                _state.update { it.copy(transcript = displayText, step = ProcessingStep.SUMMARIZING) }
+
+                val sb = StringBuilder()
+
+                if (onlineMode) {
                     withContext(Dispatchers.IO) {
-                        OpenRouterClient(apiKey, selectedModel).summarizeStreaming(transcriptResult.plainText) { chunk ->
+                        OpenRouterClient(apiKey, selectedModel).summarizeStreaming(plainText) { chunk ->
                             sb.append(chunk)
                             _state.update { it.copy(streamingSummary = sb.toString()) }
                         }
                     }
                 } else {
-                    llm?.summarizeStreaming(transcriptResult.plainText)?.collect { chunk ->
+                    llm?.summarizeStreaming(plainText)?.collect { chunk ->
                         sb.append(chunk)
                         _state.update { it.copy(streamingSummary = sb.toString()) }
                     } ?: run {
@@ -243,10 +277,10 @@ class MainViewModel(
 
                 val finalSummary = sb.toString().trim()
 
-                val title = generateTitle(transcriptResult.plainText)
+                val title = generateTitle(plainText)
                 val entity = SummaryEntity(
                     title = title,
-                    transcript = transcriptResult.timestampedText,
+                    transcript = displayText,
                     summary = finalSummary,
                     durationSeconds = durationSec
                 )

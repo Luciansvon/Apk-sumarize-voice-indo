@@ -7,14 +7,62 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 private const val TAG = "OpenRouterClient"
-private const val API_URL = "https://openrouter.ai/api/v1/chat/completions"
+private const val BASE_URL = "https://openrouter.ai/api/v1"
 
 class OpenRouterClient(
     private val apiKey: String,
     private val model: String
 ) {
+
+    fun transcribeAudio(samples: FloatArray, sttModel: String, sampleRate: Int = 16000): String {
+        val wavBytes = samples.toWavPcm16(sampleRate)
+        val boundary = "----FormBoundary${System.currentTimeMillis()}"
+        val url = URL("$BASE_URL/audio/transcriptions")
+        val conn = url.openConnection() as HttpURLConnection
+        try {
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Authorization", "Bearer $apiKey")
+            conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+            conn.setRequestProperty("HTTP-Referer", "https://sumarize-voice-indo.app")
+            conn.setRequestProperty("X-Title", "Sumarize Voice Indo")
+            conn.doOutput = true
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 120_000
+
+            conn.outputStream.use { os ->
+                fun part(name: String, value: String) {
+                    os.write("--$boundary\r\n".toByteArray())
+                    os.write("Content-Disposition: form-data; name=\"$name\"\r\n\r\n".toByteArray())
+                    os.write("$value\r\n".toByteArray())
+                }
+                part("model", sttModel)
+                part("language", "id")
+                // audio file
+                os.write("--$boundary\r\n".toByteArray())
+                os.write("Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n".toByteArray())
+                os.write("Content-Type: audio/wav\r\n\r\n".toByteArray())
+                os.write(wavBytes)
+                os.write("\r\n".toByteArray())
+                os.write("--$boundary--\r\n".toByteArray())
+            }
+
+            val code = conn.responseCode
+            if (code != HttpURLConnection.HTTP_OK) {
+                val errBody = conn.errorStream?.bufferedReader()?.readText() ?: "Unknown"
+                Log.e(TAG, "STT HTTP $code: $errBody")
+                throw Exception("STT error $code: ${parseErrorMessage(errBody)}")
+            }
+
+            val body = conn.inputStream.bufferedReader().readText()
+            return JSONObject(body).optString("text", "").trim()
+        } finally {
+            conn.disconnect()
+        }
+    }
 
     fun summarizeStreaming(transcript: String, onChunk: (String) -> Unit) {
         val prompt = buildPrompt(transcript)
@@ -30,7 +78,7 @@ class OpenRouterClient(
             })
         }.toString()
 
-        val url = URL(API_URL)
+        val url = URL("$BASE_URL/chat/completions")
         val conn = url.openConnection() as HttpURLConnection
         try {
             conn.requestMethod = "POST"
@@ -107,4 +155,24 @@ Format output:
 Transkripsi:
 $trimmed"""
     }
+}
+
+private fun FloatArray.toWavPcm16(sampleRate: Int): ByteArray {
+    val dataSize = size * 2
+    val buf = ByteBuffer.allocate(44 + dataSize).order(ByteOrder.LITTLE_ENDIAN)
+    buf.put("RIFF".toByteArray())
+    buf.putInt(36 + dataSize)
+    buf.put("WAVE".toByteArray())
+    buf.put("fmt ".toByteArray())
+    buf.putInt(16)
+    buf.putShort(1)           // PCM
+    buf.putShort(1)           // mono
+    buf.putInt(sampleRate)
+    buf.putInt(sampleRate * 2)
+    buf.putShort(2)           // block align
+    buf.putShort(16)          // bits per sample
+    buf.put("data".toByteArray())
+    buf.putInt(dataSize)
+    for (s in this) buf.putShort((s * 32767f).toInt().coerceIn(-32768, 32767).toShort())
+    return buf.array()
 }

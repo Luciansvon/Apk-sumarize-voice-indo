@@ -72,11 +72,11 @@ fun ModeSelectionScreen(
             ModeCard(
                 icon = Icons.Default.Cloud,
                 title = "Mode Online",
-                subtitle = "~75 MB download, butuh internet",
+                subtitle = "0 MB download — butuh internet & API key",
                 bullets = listOf(
-                    "Ringkasan via OpenRouter (butuh API key)",
-                    "Tidak perlu download model LLM besar",
-                    "Audio tetap diproses di HP (Whisper lokal)"
+                    "STT & ringkasan via OpenRouter (API key gratis tersedia)",
+                    "Tidak perlu download model apapun",
+                    "Akurasi lebih tinggi dengan Whisper API"
                 ),
                 highlighted = true,
                 onClick = {

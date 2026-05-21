@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,7 +37,7 @@ fun SetupScreen(
             verticalArrangement = Arrangement.Center
         ) {
             Icon(
-                imageVector = Icons.Default.CloudDownload,
+                imageVector = if (state.onlineMode) Icons.Default.Cloud else Icons.Default.CloudDownload,
                 contentDescription = null,
                 modifier = Modifier.size(72.dp),
                 tint = MaterialTheme.colorScheme.primary
@@ -45,7 +46,7 @@ fun SetupScreen(
             Spacer(Modifier.height(24.dp))
 
             Text(
-                text = "Persiapan Model AI",
+                text = if (state.onlineMode) "Mode Online Siap" else "Persiapan Model AI",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
@@ -55,7 +56,7 @@ fun SetupScreen(
 
             Text(
                 text = if (state.onlineMode)
-                    "Mode Online: download Whisper (~75MB) untuk transkripsi. Ringkasan via OpenRouter."
+                    "STT & ringkasan diproses via OpenRouter API. Tidak ada download diperlukan."
                 else
                     "Mode Offline: download sekali ~600MB, lalu jalan 100% di HP.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -65,15 +66,15 @@ fun SetupScreen(
 
             Spacer(Modifier.height(40.dp))
 
-            ModelDownloadItem(
-                label = "Model STT (Whisper base int8)",
-                size = "~75 MB",
-                isReady = state.whisperReady,
-                isDownloading = state.isDownloadingWhisper,
-                progress = state.whisperProgress
-            )
-
             if (!state.onlineMode) {
+                ModelDownloadItem(
+                    label = "Model STT (Whisper base int8)",
+                    size = "~75 MB",
+                    isReady = state.whisperReady,
+                    isDownloading = state.isDownloadingWhisper,
+                    progress = state.whisperProgress
+                )
+
                 Spacer(Modifier.height(16.dp))
 
                 ModelDownloadItem(
@@ -83,9 +84,9 @@ fun SetupScreen(
                     isDownloading = state.isDownloadingGemma,
                     progress = state.gemmaProgress
                 )
-            }
 
-            Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.height(32.dp))
+            }
 
             state.error?.let { err ->
                 Card(

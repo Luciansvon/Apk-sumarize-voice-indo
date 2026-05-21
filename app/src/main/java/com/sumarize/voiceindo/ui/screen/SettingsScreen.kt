@@ -36,16 +36,19 @@ fun SettingsScreen(
 
     var apiKeyText by remember { mutableStateOf("") }
     var selectedModelId by remember { mutableStateOf(AppPreferences.AVAILABLE_MODELS.first().id) }
+    var selectedSttModelId by remember { mutableStateOf(AppPreferences.AVAILABLE_STT_MODELS.first().id) }
     var showPrivacyDialog by remember { mutableStateOf(false) }
     var showGemmaDownloadDialog by remember { mutableStateOf(false) }
     var pendingSwitchValue by remember { mutableStateOf(false) }
     var apiKeyVisible by remember { mutableStateOf(false) }
     var dropdownExpanded by remember { mutableStateOf(false) }
+    var sttDropdownExpanded by remember { mutableStateOf(false) }
 
     // Load current prefs on first composition
     LaunchedEffect(Unit) {
         apiKeyText = viewModel.getApiKey()
         selectedModelId = viewModel.getSelectedModel()
+        selectedSttModelId = viewModel.getSelectedSttModel()
     }
 
     if (showPrivacyDialog) {
@@ -258,6 +261,51 @@ fun SettingsScreen(
                                             selectedModelId = model.id
                                             viewModel.setModel(model.id)
                                             dropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        HorizontalDivider()
+
+                        // STT model selection
+                        Text(
+                            text = "Model Transkripsi (STT)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+
+                        ExposedDropdownMenuBox(
+                            expanded = sttDropdownExpanded,
+                            onExpandedChange = { sttDropdownExpanded = it },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            val sttLabel = AppPreferences.AVAILABLE_STT_MODELS
+                                .find { it.id == selectedSttModelId }?.label ?: selectedSttModelId
+
+                            OutlinedTextField(
+                                value = sttLabel,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Model STT") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = sttDropdownExpanded) },
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth()
+                            )
+
+                            ExposedDropdownMenu(
+                                expanded = sttDropdownExpanded,
+                                onDismissRequest = { sttDropdownExpanded = false }
+                            ) {
+                                AppPreferences.AVAILABLE_STT_MODELS.forEach { model ->
+                                    DropdownMenuItem(
+                                        text = { Text(model.label) },
+                                        onClick = {
+                                            selectedSttModelId = model.id
+                                            viewModel.setSttModel(model.id)
+                                            sttDropdownExpanded = false
                                         }
                                     )
                                 }

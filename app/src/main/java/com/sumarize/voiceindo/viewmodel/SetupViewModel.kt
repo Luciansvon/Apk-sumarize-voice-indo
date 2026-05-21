@@ -25,8 +25,8 @@ data class SetupState(
     val modeChosen: Boolean = false,
     val error: String? = null
 ) {
-    // Online butuh Whisper saja; Offline butuh keduanya
-    val isReady: Boolean get() = whisperReady && (onlineMode || gemmaReady)
+    // Online: langsung siap (tidak perlu download). Offline: butuh Whisper + Gemma.
+    val isReady: Boolean get() = onlineMode || (whisperReady && gemmaReady)
     val isDownloading: Boolean get() = isDownloadingWhisper || isDownloadingGemma
 }
 
