@@ -33,13 +33,16 @@ class GemmaLLM(private val context: Context, private val modelFile: File) {
     fun summarizeStreaming(transcript: String): Flow<String> = callbackFlow {
         val llmInstance = llm ?: error("LLM not initialized — call initialize() first")
 
-        resultSink = { partial, done ->
+        val mySink: (String?, Boolean) -> Unit = { partial, done ->
             if (!partial.isNullOrEmpty()) trySend(partial)
             if (done) close()
         }
+        resultSink = mySink
 
         llmInstance.generateResponseAsync(buildPrompt(transcript))
-        awaitClose { resultSink = null }
+        // Hanya null-kan resultSink kalau kita masih pemiliknya —
+        // cegah awaitClose dari call lama menimpa resultSink milik call baru
+        awaitClose { if (resultSink === mySink) resultSink = null }
     }
 
     suspend fun summarize(transcript: String): String {

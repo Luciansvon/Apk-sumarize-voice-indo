@@ -51,7 +51,8 @@ class ModelDownloader(private val context: Context) {
         File(whisperModelDir, "decoder.int8.onnx").exists() &&
         File(whisperModelDir, "tokens.txt").exists()
 
-    fun isGemmaReady(): Boolean = gemmaModelFile.exists() && gemmaModelFile.length() > 100_000_000L
+    // Threshold: ~500MB (actual model ~529MB). File lebih kecil dari ini = corrupt/partial.
+    fun isGemmaReady(): Boolean = gemmaModelFile.exists() && gemmaModelFile.length() > 450_000_000L
 
     fun downloadWhisper(): Flow<DownloadResult> = flow {
         try {
@@ -59,10 +60,17 @@ class ModelDownloader(private val context: Context) {
             var totalDownloaded = 0L
             for ((srcName, destName) in WHISPER_FILES) {
                 val destFile = File(whisperModelDir, destName)
+                val tmpFile = File(whisperModelDir, "$destName.tmp")
                 val url = "$HF_WHISPER_BASE/$srcName"
-                downloadFile(url, destFile) { progress ->
-                    val combined = totalDownloaded + progress.bytesDownloaded
-                    emit(DownloadResult.Progress(DownloadProgress(combined, WHISPER_TOTAL_BYTES)))
+                try {
+                    downloadFile(url, tmpFile) { progress ->
+                        val combined = totalDownloaded + progress.bytesDownloaded
+                        emit(DownloadResult.Progress(DownloadProgress(combined, WHISPER_TOTAL_BYTES)))
+                    }
+                    tmpFile.renameTo(destFile)
+                } catch (e: Exception) {
+                    tmpFile.delete()  // jangan tinggalkan file setengah jadi
+                    throw e
                 }
                 totalDownloaded += destFile.length()
             }
@@ -76,8 +84,15 @@ class ModelDownloader(private val context: Context) {
     fun downloadGemma(): Flow<DownloadResult> = flow {
         try {
             gemmaModelFile.parentFile?.mkdirs()
-            downloadFile(GEMMA_URL, gemmaModelFile) { progress ->
-                emit(DownloadResult.Progress(progress))
+            val tmpFile = File(gemmaModelFile.parentFile, "${gemmaModelFile.name}.tmp")
+            try {
+                downloadFile(GEMMA_URL, tmpFile) { progress ->
+                    emit(DownloadResult.Progress(progress))
+                }
+                tmpFile.renameTo(gemmaModelFile)
+            } catch (e: Exception) {
+                tmpFile.delete()  // jangan tinggalkan file setengah jadi
+                throw e
             }
             emit(DownloadResult.Success)
         } catch (e: Exception) {

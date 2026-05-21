@@ -73,7 +73,9 @@ class AudioRecorder(private val context: Context) {
 
     suspend fun recordUntilSilence(): RecordingResult {
         stopRequested = false
-        val allSamples = mutableListOf<Float>()
+        // Kumpulkan chunk FloatArray, bukan Float satu-satu — hindari boxing ~30MB untuk 120 detik
+        val chunks = ArrayList<FloatArray>(2048)
+        val calibChunks = ArrayList<FloatArray>()
         val startMs = System.currentTimeMillis()
 
         val minBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
@@ -88,16 +90,19 @@ class AudioRecorder(private val context: Context) {
             val buffer = FloatArray(FRAMES_PER_BUFFER)
 
             // Phase 1: calibrate ambient noise for 400ms before user speaks
-            val calibSamples = mutableListOf<Float>()
             val calibEnd = startMs + NOISE_CALIBRATION_MS
             while (System.currentTimeMillis() < calibEnd) {
                 val n = recorder.read(buffer, 0, FRAMES_PER_BUFFER, AudioRecord.READ_BLOCKING)
                 if (n > 0) {
-                    allSamples.addAll(buffer.copyOf(n).toList())
-                    calibSamples.addAll(buffer.copyOf(n).toList())
+                    val chunk = buffer.copyOf(n)
+                    chunks.add(chunk)
+                    calibChunks.add(chunk)
                 }
             }
-            val noiseFloor = if (calibSamples.isNotEmpty()) calculateRms(calibSamples.toFloatArray()) else 0f
+            val noiseFloor = if (calibChunks.isNotEmpty()) {
+                val flat = flattenChunks(calibChunks)
+                calculateRms(flat)
+            } else 0f
             // Threshold = 5x noise floor, minimum 0.015
             val threshold = maxOf(noiseFloor * 5f, MIN_SILENCE_THRESHOLD)
             Log.i(TAG, "Noise floor: $noiseFloor  threshold: $threshold")
@@ -110,7 +115,7 @@ class AudioRecorder(private val context: Context) {
                 if (read <= 0) continue
 
                 val chunk = buffer.copyOf(read)
-                allSamples.addAll(chunk.toList())
+                chunks.add(chunk)
 
                 val elapsed = System.currentTimeMillis() - startMs
                 if (elapsed > MAX_RECORDING_MS) break
@@ -135,7 +140,15 @@ class AudioRecorder(private val context: Context) {
         }
 
         val durationMs = System.currentTimeMillis() - startMs
-        return RecordingResult(allSamples.toFloatArray(), durationMs)
+        return RecordingResult(flattenChunks(chunks), durationMs)
+    }
+
+    private fun flattenChunks(chunks: List<FloatArray>): FloatArray {
+        val total = chunks.sumOf { it.size }
+        val out = FloatArray(total)
+        var pos = 0
+        for (c in chunks) { c.copyInto(out, pos); pos += c.size }
+        return out
     }
 
     private fun calculateRms(samples: FloatArray): Float {

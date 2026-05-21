@@ -80,6 +80,10 @@ class MainViewModel(
     }
 
     fun startRecordAndProcess() {
+        if (!_state.value.isModelsReady) {
+            _state.update { it.copy(errorMessage = "Model masih dimuat, tunggu sebentar...") }
+            return
+        }
         val current = _state.value.step
         if (current == ProcessingStep.RECORDING ||
             current == ProcessingStep.TRANSCRIBING ||

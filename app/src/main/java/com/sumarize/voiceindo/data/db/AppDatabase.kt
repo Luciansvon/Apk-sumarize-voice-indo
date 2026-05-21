@@ -5,7 +5,9 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [SummaryEntity::class], version = 1, exportSchema = false)
+// exportSchema = true: schema di-commit ke git di folder /app/schemas
+// Kalau ganti struktur tabel di versi selanjutnya, tambah kelas Migration_X_Y di sini
+@Database(entities = [SummaryEntity::class], version = 1, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun summaryDao(): SummaryDao
 
@@ -18,7 +20,11 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "sumarize_db"
-                ).build().also { INSTANCE = it }
+                )
+                // Kalau schema berubah tanpa migration yang terdaftar, hapus DB lama
+                // (cukup untuk fase dev; ganti dengan addMigrations() setelah ada user nyata)
+                .fallbackToDestructiveMigration()
+                .build().also { INSTANCE = it }
             }
     }
 }
