@@ -21,7 +21,7 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                 // Kalau schema berubah tanpa migration yang terdaftar, hapus DB lama
                 // (cukup untuk fase dev; ganti dengan addMigrations() setelah ada user nyata)
-                .fallbackToDestructiveMigration(dropAllTables = true)
+                .fallbackToDestructiveMigration(true)
                 .build().also { INSTANCE = it }
             }
     }
