@@ -62,6 +62,12 @@ jobs:
              "artifacts/SumarizeVoiceIndo-${GITHUB_SHA::7}.apk"
           ls -lh artifacts/
 
+      - name: Sanitize branch name for tag
+        id: branch
+        run: |
+          SAFE=$(echo "${{ github.ref_name }}" | tr '/' '-' | tr '_' '-' | tr '[:upper:]' '[:lower:]')
+          echo "safe=$SAFE" >> $GITHUB_OUTPUT
+
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         with:
@@ -82,16 +88,16 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*.apk
-          tag_name: "build-${{ github.ref_name }}-latest"
-          name: "Latest Build (${{ github.ref_name }})"
+          tag_name: "latest-${{ steps.branch.outputs.safe }}"
+          name: "APK Terbaru"
           body: |
-            Otomatis dibuild dari commit `${{ github.sha }}`.
+            Build otomatis dari commit `${{ github.sha }}`.
 
-            **Cara install di HP:**
-            1. Download file `.apk` di bawah
-            2. Buka file → izinkan "Install from Unknown Sources"
-            3. Tap Install
-
-            Saat pertama buka app, akan download model AI ~604MB (sekali aja, lalu offline selamanya).
+            ## Cara install di HP Android:
+            1. Tap file `.apk` di bawah ini
+            2. Jika muncul peringatan → tap **"Install anyway"** / **"Tetap install"**
+            3. Aktifkan **"Install from Unknown Sources"** jika diminta → Install
+            4. Buka app → download model AI ~604MB via WiFi (sekali saja)
+            5. Setelah itu **100% offline selamanya** ✅
           prerelease: true
-          make_latest: false
+          make_latest: true
