@@ -85,18 +85,40 @@ class ModelDownloader(private val context: Context) {
         onProgress: suspend (DownloadProgress) -> Unit
     ) {
         dest.parentFile?.mkdirs()
-        val conn = URL(urlString).openConnection() as HttpURLConnection
-        conn.apply {
-            connectTimeout = 30_000
-            readTimeout = 60_000
-            instanceFollowRedirects = true
-            connect()
+
+        // Follow redirects manually — Android's HttpURLConnection may drop cross-domain redirects
+        var currentUrl = urlString
+        var conn: HttpURLConnection? = null
+        repeat(10) { attempt ->
+            val c = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 30_000
+                readTimeout = 120_000
+                instanceFollowRedirects = false
+                setRequestProperty("User-Agent", "Mozilla/5.0")
+                connect()
+            }
+            val code = c.responseCode
+            if (code in 301..308) {
+                val location = c.getHeaderField("Location")
+                c.disconnect()
+                if (location.isNullOrBlank()) throw java.io.IOException("Redirect tanpa Location header")
+                currentUrl = location
+                conn = null
+            } else {
+                if (code != 200) {
+                    c.disconnect()
+                    throw java.io.IOException("HTTP $code saat download")
+                }
+                conn = c
+                return@repeat
+            }
         }
 
-        val total = conn.contentLengthLong
+        val finalConn = conn ?: throw java.io.IOException("Terlalu banyak redirect")
+        val total = finalConn.contentLengthLong
         var downloaded = 0L
 
-        conn.inputStream.use { input ->
+        finalConn.inputStream.use { input ->
             FileOutputStream(dest).use { output ->
                 val buf = ByteArray(128 * 1024)
                 var n: Int
@@ -107,7 +129,7 @@ class ModelDownloader(private val context: Context) {
                 }
             }
         }
-        conn.disconnect()
+        finalConn.disconnect()
     }
 
     private fun extractTarBz2(archive: File, destDir: File) {
