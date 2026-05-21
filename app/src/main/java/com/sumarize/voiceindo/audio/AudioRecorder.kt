@@ -39,7 +39,8 @@ class AudioRecorder(private val context: Context) {
             PackageManager.PERMISSION_GRANTED
 
     suspend fun recordUntilSilence(
-        onChunkAvailable: ((FloatArray) -> Unit)? = null
+        onChunkAvailable: ((FloatArray) -> Unit)? = null,
+        onAmplitudeChange: ((Float) -> Unit)? = null
     ): RecordingResult {
         stopRequested = false
         // Kumpulkan chunk FloatArray, bukan Float satu-satu — hindari boxing ~30MB untuk 120 detik
@@ -89,6 +90,7 @@ class AudioRecorder(private val context: Context) {
                 if (elapsed > MAX_RECORDING_MS) break
 
                 val rms = calculateRms(chunk)
+                onAmplitudeChange?.invoke(rms)
                 val now = System.currentTimeMillis()
 
                 if (rms > threshold) {

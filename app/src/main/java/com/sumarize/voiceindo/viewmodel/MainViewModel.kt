@@ -7,15 +7,19 @@ import androidx.lifecycle.viewModelScope
 import com.sumarize.voiceindo.audio.AudioRecorder
 import com.sumarize.voiceindo.data.db.AppDatabase
 import com.sumarize.voiceindo.data.db.SummaryEntity
+import com.sumarize.voiceindo.data.preferences.AppPreferences
 import com.sumarize.voiceindo.data.repository.SummaryRepository
 import com.sumarize.voiceindo.ml.GemmaLLM
 import com.sumarize.voiceindo.ml.ModelDownloader
+import com.sumarize.voiceindo.ml.OpenRouterClient
 import com.sumarize.voiceindo.ml.SherpaOnnxSTT
 import com.sumarize.voiceindo.ml.TranscriptResult
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -32,7 +36,10 @@ data class MainUiState(
     val streamingSummary: String = "",
     val durationSeconds: Int = 0,
     val errorMessage: String? = null,
-    val isModelsReady: Boolean = false
+    val isModelsReady: Boolean = false,
+    val recordingSeconds: Int = 0,
+    val currentAmplitude: Float = 0f,
+    val isOnlineMode: Boolean = false
 )
 
 class MainViewModel(
@@ -45,6 +52,7 @@ class MainViewModel(
 
     private val recorder = AudioRecorder(context)
     private val downloader = ModelDownloader(context)
+    private val prefs = AppPreferences(context)
 
     private var stt: SherpaOnnxSTT? = null
     private var llm: GemmaLLM? = null
@@ -53,6 +61,27 @@ class MainViewModel(
 
     init {
         initModels()
+        observePreferences()
+    }
+
+    private fun observePreferences() {
+        viewModelScope.launch {
+            prefs.isOnlineMode.collect { online ->
+                _state.update { it.copy(isOnlineMode = online) }
+            }
+        }
+    }
+
+    fun setOnlineMode(v: Boolean) {
+        viewModelScope.launch { prefs.setOnlineMode(v) }
+    }
+
+    fun setApiKey(k: String) {
+        viewModelScope.launch { prefs.setApiKey(k) }
+    }
+
+    fun setModel(m: String) {
+        viewModelScope.launch { prefs.setModel(m) }
     }
 
     private fun initModels() {
@@ -101,31 +130,52 @@ class MainViewModel(
                     transcript = "",
                     summary = "",
                     streamingSummary = "",
-                    errorMessage = null
+                    errorMessage = null,
+                    recordingSeconds = 0,
+                    currentAmplitude = 0f
                 )
             }
-            try {
-                val result = withContext(Dispatchers.IO) {
-                    recorder.recordUntilSilence { chunkSamples ->
-                        if (!isTranscribingChunk) {
-                            isTranscribingChunk = true
-                            viewModelScope.launch(Dispatchers.IO) {
-                                try {
-                                    val text = stt?.transcribe(chunkSamples)?.plainText?.trim() ?: ""
-                                    if (text.isNotBlank()) {
-                                        _state.update { s ->
-                                            val joined = if (s.liveTranscript.isBlank()) text
-                                                         else "${s.liveTranscript} $text"
-                                            s.copy(liveTranscript = joined)
-                                        }
-                                    }
-                                } finally {
-                                    isTranscribingChunk = false
-                                }
-                            }
-                        }
+
+            // Timer coroutine
+            val timerJob = launch {
+                while (_state.value.step == ProcessingStep.RECORDING) {
+                    delay(1000L)
+                    if (_state.value.step == ProcessingStep.RECORDING) {
+                        _state.update { it.copy(recordingSeconds = it.recordingSeconds + 1) }
                     }
                 }
+            }
+
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    recorder.recordUntilSilence(
+                        onChunkAvailable = { chunkSamples ->
+                            if (!isTranscribingChunk) {
+                                isTranscribingChunk = true
+                                viewModelScope.launch(Dispatchers.IO) {
+                                    try {
+                                        val text = stt?.transcribe(chunkSamples)?.plainText?.trim() ?: ""
+                                        if (text.isNotBlank()) {
+                                            _state.update { s ->
+                                                val joined = if (s.liveTranscript.isBlank()) text
+                                                             else "${s.liveTranscript} $text"
+                                                s.copy(liveTranscript = joined)
+                                            }
+                                        }
+                                    } finally {
+                                        isTranscribingChunk = false
+                                    }
+                                }
+                            }
+                        },
+                        onAmplitudeChange = { amp ->
+                            _state.update { it.copy(currentAmplitude = amp) }
+                        }
+                    )
+                }
+                timerJob.cancel()
+                _state.update { it.copy(currentAmplitude = 0f) }
+
                 val durationSec = (result.durationMs / 1000).toInt()
 
                 _state.update { it.copy(step = ProcessingStep.TRANSCRIBING, durationSeconds = durationSec) }
@@ -148,12 +198,25 @@ class MainViewModel(
                 _state.update { it.copy(transcript = transcriptResult.timestampedText, step = ProcessingStep.SUMMARIZING) }
 
                 val sb = StringBuilder()
-                llm?.summarizeStreaming(transcriptResult.plainText)?.collect { chunk ->
-                    sb.append(chunk)
-                    _state.update { it.copy(streamingSummary = sb.toString()) }
-                } ?: run {
-                    _state.update { it.copy(step = ProcessingStep.ERROR, errorMessage = "LLM belum siap") }
-                    return@launch
+                val onlineMode = prefs.isOnlineMode.first()
+                val apiKey = prefs.apiKey.first()
+                val selectedModel = prefs.selectedModel.first()
+
+                if (onlineMode && apiKey.isNotBlank()) {
+                    withContext(Dispatchers.IO) {
+                        OpenRouterClient(apiKey, selectedModel).summarizeStreaming(transcriptResult.plainText) { chunk ->
+                            sb.append(chunk)
+                            _state.update { it.copy(streamingSummary = sb.toString()) }
+                        }
+                    }
+                } else {
+                    llm?.summarizeStreaming(transcriptResult.plainText)?.collect { chunk ->
+                        sb.append(chunk)
+                        _state.update { it.copy(streamingSummary = sb.toString()) }
+                    } ?: run {
+                        _state.update { it.copy(step = ProcessingStep.ERROR, errorMessage = "LLM belum siap") }
+                        return@launch
+                    }
                 }
 
                 val finalSummary = sb.toString().trim()
@@ -175,10 +238,12 @@ class MainViewModel(
                     )
                 }
             } catch (e: Exception) {
+                timerJob.cancel()
                 _state.update {
                     it.copy(
                         step = ProcessingStep.ERROR,
-                        errorMessage = e.message ?: "Terjadi kesalahan"
+                        errorMessage = e.message ?: "Terjadi kesalahan",
+                        currentAmplitude = 0f
                     )
                 }
             }
