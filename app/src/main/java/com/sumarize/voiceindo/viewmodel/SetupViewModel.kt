@@ -4,11 +4,13 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.sumarize.voiceindo.data.preferences.AppPreferences
 import com.sumarize.voiceindo.ml.DownloadResult
 import com.sumarize.voiceindo.ml.ModelDownloader
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -19,15 +21,20 @@ data class SetupState(
     val gemmaProgress: Float = 0f,
     val isDownloadingWhisper: Boolean = false,
     val isDownloadingGemma: Boolean = false,
+    val onlineMode: Boolean = false,
+    val modeChosen: Boolean = false,
     val error: String? = null
 ) {
-    val isReady: Boolean get() = whisperReady && gemmaReady
+    // Online butuh Whisper saja; Offline butuh keduanya
+    val isReady: Boolean get() = whisperReady && (onlineMode || gemmaReady)
     val isDownloading: Boolean get() = isDownloadingWhisper || isDownloadingGemma
 }
 
 class SetupViewModel(context: Context) : ViewModel() {
 
     private val downloader = ModelDownloader(context)
+    private val prefs = AppPreferences(context)
+
     private val _state = MutableStateFlow(
         SetupState(
             whisperReady = downloader.isWhisperReady(),
@@ -36,9 +43,40 @@ class SetupViewModel(context: Context) : ViewModel() {
     )
     val state: StateFlow<SetupState> = _state.asStateFlow()
 
-    fun downloadAll() {
+    init {
+        viewModelScope.launch {
+            prefs.isOnlineMode.collect { online ->
+                _state.update { it.copy(onlineMode = online) }
+            }
+        }
+        viewModelScope.launch {
+            prefs.modeChosen.collect { chosen ->
+                _state.update { it.copy(modeChosen = chosen) }
+            }
+        }
+    }
+
+    fun chooseOnlineMode() {
+        // Update sinkron agar navigasi langsung melihat mode baru
+        _state.update { it.copy(onlineMode = true, modeChosen = true) }
+        viewModelScope.launch {
+            prefs.setOnlineMode(true)
+            prefs.setModeChosen(true)
+        }
+    }
+
+    fun chooseOfflineMode() {
+        _state.update { it.copy(onlineMode = false, modeChosen = true) }
+        viewModelScope.launch {
+            prefs.setOnlineMode(false)
+            prefs.setModeChosen(true)
+        }
+    }
+
+    fun downloadRequired() {
         if (!_state.value.whisperReady) downloadWhisper()
-        if (!_state.value.gemmaReady) downloadGemma()
+        // Gemma hanya didownload jika mode offline
+        if (!_state.value.onlineMode && !_state.value.gemmaReady) downloadGemma()
     }
 
     private fun downloadWhisper() {

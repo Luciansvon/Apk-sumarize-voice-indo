@@ -54,7 +54,10 @@ fun SetupScreen(
             Spacer(Modifier.height(8.dp))
 
             Text(
-                text = "Download sekali ~600MB, lalu aplikasi berjalan 100% offline.",
+                text = if (state.onlineMode)
+                    "Mode Online: download Whisper (~75MB) untuk transkripsi. Ringkasan via OpenRouter."
+                else
+                    "Mode Offline: download sekali ~600MB, lalu jalan 100% di HP.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
@@ -70,15 +73,17 @@ fun SetupScreen(
                 progress = state.whisperProgress
             )
 
-            Spacer(Modifier.height(16.dp))
+            if (!state.onlineMode) {
+                Spacer(Modifier.height(16.dp))
 
-            ModelDownloadItem(
-                label = "Model LLM (Gemma 3 1B int4)",
-                size = "~529 MB",
-                isReady = state.gemmaReady,
-                isDownloading = state.isDownloadingGemma,
-                progress = state.gemmaProgress
-            )
+                ModelDownloadItem(
+                    label = "Model LLM (Gemma 3 1B int4)",
+                    size = "~529 MB",
+                    isReady = state.gemmaReady,
+                    isDownloading = state.isDownloadingGemma,
+                    progress = state.gemmaProgress
+                )
+            }
 
             Spacer(Modifier.height(32.dp))
 
@@ -101,7 +106,7 @@ fun SetupScreen(
 
             if (!state.isDownloading && !state.isReady) {
                 Button(
-                    onClick = { viewModel.downloadAll() },
+                    onClick = { viewModel.downloadRequired() },
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {

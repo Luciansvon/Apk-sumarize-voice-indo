@@ -88,6 +88,8 @@ class MainViewModel(
 
     suspend fun getSelectedModel(): String = prefs.selectedModel.first()
 
+    fun isGemmaReady(): Boolean = downloader.isGemmaReady()
+
     private fun initModels() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -208,7 +210,16 @@ class MainViewModel(
                 val apiKey = prefs.apiKey.first()
                 val selectedModel = prefs.selectedModel.first()
 
-                if (onlineMode && apiKey.isNotBlank()) {
+                if (onlineMode) {
+                    if (apiKey.isBlank()) {
+                        _state.update {
+                            it.copy(
+                                step = ProcessingStep.ERROR,
+                                errorMessage = "Mode Online aktif tapi API key OpenRouter belum di-isi. Buka Pengaturan untuk konfigurasi."
+                            )
+                        }
+                        return@launch
+                    }
                     withContext(Dispatchers.IO) {
                         OpenRouterClient(apiKey, selectedModel).summarizeStreaming(transcriptResult.plainText) { chunk ->
                             sb.append(chunk)
@@ -220,7 +231,12 @@ class MainViewModel(
                         sb.append(chunk)
                         _state.update { it.copy(streamingSummary = sb.toString()) }
                     } ?: run {
-                        _state.update { it.copy(step = ProcessingStep.ERROR, errorMessage = "LLM belum siap") }
+                        _state.update {
+                            it.copy(
+                                step = ProcessingStep.ERROR,
+                                errorMessage = "Model LLM lokal belum siap. Buka Pengaturan untuk pindah ke Mode Online atau download model."
+                            )
+                        }
                         return@launch
                     }
                 }

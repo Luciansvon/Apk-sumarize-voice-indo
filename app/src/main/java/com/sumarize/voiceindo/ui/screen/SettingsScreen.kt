@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(
     viewModel: MainViewModel,
+    onNavigateToDownload: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val state by viewModel.state.collectAsState()
@@ -36,6 +37,7 @@ fun SettingsScreen(
     var apiKeyText by remember { mutableStateOf("") }
     var selectedModelId by remember { mutableStateOf(AppPreferences.AVAILABLE_MODELS.first().id) }
     var showPrivacyDialog by remember { mutableStateOf(false) }
+    var showGemmaDownloadDialog by remember { mutableStateOf(false) }
     var pendingSwitchValue by remember { mutableStateOf(false) }
     var apiKeyVisible by remember { mutableStateOf(false) }
     var dropdownExpanded by remember { mutableStateOf(false) }
@@ -71,6 +73,33 @@ fun SettingsScreen(
                     showPrivacyDialog = false
                     // revert — don't change the mode
                 }) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
+
+    if (showGemmaDownloadDialog) {
+        AlertDialog(
+            onDismissRequest = { showGemmaDownloadDialog = false },
+            title = { Text("Download Model Diperlukan") },
+            text = {
+                Text(
+                    "Mode Offline butuh Gemma 3 1B (~529 MB) yang belum kamu download. " +
+                    "Lanjut ke halaman download sekarang?"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showGemmaDownloadDialog = false
+                    viewModel.setOnlineMode(false)
+                    onNavigateToDownload()
+                }) {
+                    Text("Download Sekarang")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGemmaDownloadDialog = false }) {
                     Text("Batal")
                 }
             }
@@ -127,11 +156,16 @@ fun SettingsScreen(
                         checked = state.isOnlineMode,
                         onCheckedChange = { newValue ->
                             if (newValue && !state.isOnlineMode) {
-                                // First time turning on — show privacy disclaimer
+                                // Mengaktifkan online — tampilkan privacy disclaimer
                                 pendingSwitchValue = newValue
                                 showPrivacyDialog = true
-                            } else {
-                                viewModel.setOnlineMode(newValue)
+                            } else if (!newValue && state.isOnlineMode) {
+                                // Switch ke offline — pastikan Gemma sudah didownload
+                                if (viewModel.isGemmaReady()) {
+                                    viewModel.setOnlineMode(false)
+                                } else {
+                                    showGemmaDownloadDialog = true
+                                }
                             }
                         }
                     )

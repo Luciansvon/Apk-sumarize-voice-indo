@@ -13,6 +13,7 @@ class AppPreferences(private val context: Context) {
         private val KEY_ONLINE_MODE = booleanPreferencesKey("online_mode")
         private val KEY_API_KEY = stringPreferencesKey("openrouter_api_key")
         private val KEY_MODEL = stringPreferencesKey("openrouter_model")
+        private val KEY_MODE_CHOSEN = booleanPreferencesKey("mode_chosen")
 
         data class ModelOption(val id: String, val label: String)
         val AVAILABLE_MODELS = listOf(
@@ -33,8 +34,10 @@ class AppPreferences(private val context: Context) {
     val isOnlineMode: Flow<Boolean> = context.dataStore.data.map { it[KEY_ONLINE_MODE] ?: false }
     val apiKey: Flow<String> = context.dataStore.data.map { it[KEY_API_KEY] ?: "" }
     val selectedModel: Flow<String> = context.dataStore.data.map { it[KEY_MODEL] ?: AVAILABLE_MODELS.first().id }
+    val modeChosen: Flow<Boolean> = context.dataStore.data.map { it[KEY_MODE_CHOSEN] ?: false }
 
     suspend fun setOnlineMode(v: Boolean) = context.dataStore.edit { it[KEY_ONLINE_MODE] = v }
     suspend fun setApiKey(v: String) = context.dataStore.edit { it[KEY_API_KEY] = v }
     suspend fun setModel(v: String) = context.dataStore.edit { it[KEY_MODEL] = v }
+    suspend fun setModeChosen(v: Boolean) = context.dataStore.edit { it[KEY_MODE_CHOSEN] = v }
 }
