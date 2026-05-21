@@ -42,7 +42,7 @@ android {
 
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
-        jniLibs { pickFirsts += listOf("**/libc++_shared.so") }
+        jniLibs { pickFirsts += listOf("**/libc++_shared.so", "**/libonnxruntime.so") }
     }
 }
 
@@ -74,10 +74,8 @@ dependencies {
     // MediaPipe LLM Inference (Gemma 3 1B)
     implementation("com.google.mediapipe:tasks-genai:0.10.20")
 
-    // ONNX Runtime (required by sherpa-onnx)
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.3")
-
     // sherpa-onnx local AAR (download via download_libs.sh first)
+    // Note: sherpa-onnx AAR bundles libonnxruntime.so — do NOT add onnxruntime-android here
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
 
     // tar.bz2 extraction for Whisper model download
