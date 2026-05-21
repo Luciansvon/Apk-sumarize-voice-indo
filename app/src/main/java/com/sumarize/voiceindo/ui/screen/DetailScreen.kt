@@ -1,18 +1,25 @@
 package com.sumarize.voiceindo.ui.screen
 
+import android.content.Intent
+import android.os.Environment
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sumarize.voiceindo.viewmodel.HistoryViewModel
+import kotlinx.coroutines.launch
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -25,6 +32,9 @@ fun DetailScreen(
     onNavigateBack: () -> Unit
 ) {
     val selected by viewModel.selected.collectAsState()
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(summaryId) { viewModel.loadById(summaryId) }
 
@@ -36,9 +46,36 @@ fun DetailScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Kembali")
                     }
+                },
+                actions = {
+                    selected?.let { entity ->
+                        IconButton(onClick = {
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, entity.summary)
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "Bagikan ringkasan"))
+                        }) {
+                            Icon(Icons.Default.Share, "Bagikan")
+                        }
+                        IconButton(onClick = {
+                            try {
+                                val dir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
+                                    ?: context.filesDir
+                                val file = File(dir, "sumarize_${System.currentTimeMillis()}.txt")
+                                file.writeText("TRANSKRIPSI:\n${entity.transcript}\n\nRINGKASAN:\n${entity.summary}")
+                                scope.launch { snackbarHostState.showSnackbar("File disimpan di Documents/") }
+                            } catch (e: Exception) {
+                                scope.launch { snackbarHostState.showSnackbar("Gagal menyimpan file: ${e.message}") }
+                            }
+                        }) {
+                            Icon(Icons.Default.Download, "Ekspor TXT")
+                        }
+                    }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         val entity = selected
         if (entity == null) {

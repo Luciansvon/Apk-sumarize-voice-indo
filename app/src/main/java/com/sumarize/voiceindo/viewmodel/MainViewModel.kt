@@ -84,6 +84,10 @@ class MainViewModel(
         viewModelScope.launch { prefs.setModel(m) }
     }
 
+    suspend fun getApiKey(): String = prefs.apiKey.first()
+
+    suspend fun getSelectedModel(): String = prefs.selectedModel.first()
+
     private fun initModels() {
         viewModelScope.launch(Dispatchers.IO) {
             try {

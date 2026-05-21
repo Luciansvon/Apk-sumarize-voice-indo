@@ -1,6 +1,8 @@
 package com.sumarize.voiceindo.ui.screen
 
 import android.Manifest
+import android.content.Intent
+import android.os.Environment
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -12,29 +14,40 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.sumarize.voiceindo.viewmodel.MainViewModel
 import com.sumarize.voiceindo.viewmodel.ProcessingStep
+import kotlinx.coroutines.launch
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     viewModel: MainViewModel,
-    onNavigateToHistory: () -> Unit
+    onNavigateToHistory: () -> Unit,
+    onNavigateToSettings: () -> Unit = {}
 ) {
     val state by viewModel.state.collectAsState()
     var permissionDenied by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -50,12 +63,16 @@ fun HomeScreen(
                     Text("Sumarize Voice", fontWeight = FontWeight.Bold)
                 },
                 actions = {
+                    IconButton(onClick = onNavigateToSettings) {
+                        Icon(Icons.Default.Settings, "Pengaturan")
+                    }
                     IconButton(onClick = onNavigateToHistory) {
                         Icon(Icons.Default.History, "Riwayat")
                     }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -73,6 +90,8 @@ fun HomeScreen(
 
             RecordButton(
                 step = state.step,
+                recordingSeconds = state.recordingSeconds,
+                currentAmplitude = state.currentAmplitude,
                 onClick = {
                     when (state.step) {
                         ProcessingStep.IDLE -> {
@@ -131,6 +150,47 @@ fun HomeScreen(
                 )
             }
 
+            if (state.step == ProcessingStep.DONE && state.summary.isNotBlank()) {
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, state.summary)
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "Bagikan ringkasan"))
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Bagikan")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            try {
+                                val dir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
+                                    ?: context.filesDir
+                                val file = File(dir, "sumarize_${System.currentTimeMillis()}.txt")
+                                file.writeText("TRANSKRIPSI:\n${state.transcript}\n\nRINGKASAN:\n${state.summary}")
+                                scope.launch { snackbarHostState.showSnackbar("File disimpan di Documents/") }
+                            } catch (e: Exception) {
+                                scope.launch { snackbarHostState.showSnackbar("Gagal menyimpan file: ${e.message}") }
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Ekspor TXT")
+                    }
+                }
+            }
+
             state.errorMessage?.let { err ->
                 Spacer(Modifier.height(12.dp))
                 Card(
@@ -178,8 +238,45 @@ private fun StatusBadge(step: ProcessingStep) {
     }
 }
 
+private val WAVEFORM_MULTIPLIERS = listOf(0.4f, 0.9f, 0.6f, 1.0f, 0.7f, 1.0f, 0.5f, 0.8f, 0.3f)
+
 @Composable
-private fun RecordButton(step: ProcessingStep, onClick: () -> Unit) {
+private fun WaveformBars(amplitude: Float) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        WAVEFORM_MULTIPLIERS.forEach { multiplier ->
+            val targetHeight: Dp = if (amplitude > 0f) {
+                (amplitude * 300f * multiplier).dp.coerceIn(4.dp, 40.dp)
+            } else {
+                4.dp
+            }
+            val animatedHeight by animateDpAsState(
+                targetValue = targetHeight,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+                label = "wavebar"
+            )
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(animatedHeight)
+                    .background(
+                        color = MaterialTheme.colorScheme.error,
+                        shape = RoundedCornerShape(2.dp)
+                    )
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecordButton(
+    step: ProcessingStep,
+    recordingSeconds: Int = 0,
+    currentAmplitude: Float = 0f,
+    onClick: () -> Unit
+) {
     val isRecording = step == ProcessingStep.RECORDING
     val isProcessing = step == ProcessingStep.TRANSCRIBING || step == ProcessingStep.SUMMARIZING
 
@@ -238,19 +335,35 @@ private fun RecordButton(step: ProcessingStep, onClick: () -> Unit) {
     }
 
     Spacer(Modifier.height(8.dp))
-    Text(
-        text = when (step) {
-            ProcessingStep.IDLE -> "Ketuk untuk merekam"
-            ProcessingStep.RECORDING -> "Berhenti otomatis saat hening"
-            ProcessingStep.TRANSCRIBING -> "Memproses suara..."
-            ProcessingStep.SUMMARIZING -> "Membuat ringkasan..."
-            ProcessingStep.DONE -> "Ketuk untuk rekam baru"
-            ProcessingStep.ERROR -> "Ketuk untuk coba lagi"
-        },
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = TextAlign.Center
-    )
+
+    if (isRecording) {
+        val minutes = recordingSeconds / 60
+        val seconds = recordingSeconds % 60
+        val timerText = "%02d:%02d".format(minutes, seconds)
+        Text(
+            text = timerText,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.error,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(8.dp))
+        WaveformBars(amplitude = currentAmplitude)
+    } else {
+        Text(
+            text = when (step) {
+                ProcessingStep.IDLE -> "Ketuk untuk merekam"
+                ProcessingStep.TRANSCRIBING -> "Memproses suara..."
+                ProcessingStep.SUMMARIZING -> "Membuat ringkasan..."
+                ProcessingStep.DONE -> "Ketuk untuk rekam baru"
+                ProcessingStep.ERROR -> "Ketuk untuk coba lagi"
+                else -> ""
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+    }
 }
 
 @Composable
