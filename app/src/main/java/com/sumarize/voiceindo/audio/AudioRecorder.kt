@@ -33,6 +33,11 @@ data class RecordingResult(val samples: FloatArray, val durationMs: Long)
 
 class AudioRecorder(private val context: Context) {
 
+    @Volatile var stopRequested = false
+        private set
+
+    fun requestStop() { stopRequested = true }
+
     fun hasPermission(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
@@ -67,6 +72,7 @@ class AudioRecorder(private val context: Context) {
     }.flowOn(Dispatchers.IO)
 
     suspend fun recordUntilSilence(): RecordingResult {
+        stopRequested = false
         val allSamples = mutableListOf<Float>()
         val startMs = System.currentTimeMillis()
 
@@ -99,7 +105,7 @@ class AudioRecorder(private val context: Context) {
             // Phase 2: main recording with VAD
             var silenceStart: Long? = null
 
-            while (coroutineContext.isActive) {
+            while (coroutineContext.isActive && !stopRequested) {
                 val read = recorder.read(buffer, 0, FRAMES_PER_BUFFER, AudioRecord.READ_BLOCKING)
                 if (read <= 0) continue
 
