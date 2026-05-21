@@ -3,9 +3,10 @@ package com.sumarize.voiceindo.ml
 import android.content.Context
 import android.util.Log
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
-import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withContext
 import java.io.File
 
 private const val TAG = "GemmaLLM"
@@ -25,15 +26,25 @@ class GemmaLLM(private val context: Context, private val modelFile: File) {
         Log.i(TAG, "Gemma 3 1B initialized")
     }
 
-    fun summarizeStreaming(transcript: String): Flow<String> = callbackFlow {
+    // Non-streaming: generateResponse() properly decodes the output.
+    // generateResponseAsync with ProgressListener returns raw tokenizer strings
+    // (<unused>, <pad>, etc.) for some model variants — sync avoids this.
+    fun summarizeStreaming(transcript: String): Flow<String> = flow {
         val llmInstance = llm ?: error("LLM not initialized — call initialize() first")
-
-        llmInstance.generateResponseAsync(buildPrompt(transcript)) { partial, done ->
-            if (!partial.isNullOrEmpty()) trySend(partial)
-            if (done) close()
+        val raw = withContext(Dispatchers.IO) {
+            llmInstance.generateResponse(buildPrompt(transcript))
         }
-        awaitClose { }
+        val clean = raw.filterSpecialTokens()
+        Log.i(TAG, "Generated ${raw.length} chars, ${clean.length} after filter")
+        if (clean.isNotBlank()) emit(clean)
     }
+
+    private fun String.filterSpecialTokens(): String =
+        replace(Regex("<[^>]{1,50}>"), "")
+            .replace(Regex("\\[[^\\]]{1,30}\\]"), "")
+            .replace(Regex("[ \t]{2,}"), " ")
+            .replace(Regex("\n{3,}"), "\n\n")
+            .trim()
 
     private fun buildPrompt(transcript: String): String {
         val trimmed = transcript.take(3000)
@@ -62,3 +73,4 @@ $trimmed
         Log.i(TAG, "Gemma LLM released")
     }
 }
+
