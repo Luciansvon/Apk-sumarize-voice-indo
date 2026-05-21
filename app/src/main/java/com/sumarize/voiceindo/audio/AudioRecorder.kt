@@ -8,10 +8,6 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.isActive
 import kotlin.coroutines.coroutineContext
 import kotlin.math.sqrt
@@ -28,7 +24,6 @@ private const val MIN_RECORDING_MS = 1500L
 private const val MAX_RECORDING_MS = 120_000L
 private const val NOISE_CALIBRATION_MS = 400L
 
-data class AudioChunk(val samples: FloatArray, val rms: Float)
 data class RecordingResult(val samples: FloatArray, val durationMs: Long)
 
 class AudioRecorder(private val context: Context) {
@@ -42,40 +37,11 @@ class AudioRecorder(private val context: Context) {
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
 
-    fun recordWithVad(): Flow<AudioChunk> = flow {
-        val minBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
-        val bufSize = maxOf(minBufSize, FRAMES_PER_BUFFER * 4)
-
-        val recorder = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
-            SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT, bufSize
-        )
-
-        recorder.startRecording()
-        Log.i(TAG, "Recording started")
-
-        try {
-            val buffer = FloatArray(FRAMES_PER_BUFFER)
-            while (coroutineContext.isActive) {
-                val read = recorder.read(buffer, 0, FRAMES_PER_BUFFER, AudioRecord.READ_BLOCKING)
-                if (read > 0) {
-                    val chunk = buffer.copyOf(read)
-                    val rms = calculateRms(chunk)
-                    emit(AudioChunk(chunk, rms))
-                }
-            }
-        } finally {
-            recorder.stop()
-            recorder.release()
-            Log.i(TAG, "Recording stopped")
-        }
-    }.flowOn(Dispatchers.IO)
-
     suspend fun recordUntilSilence(): RecordingResult {
         stopRequested = false
         // Kumpulkan chunk FloatArray, bukan Float satu-satu — hindari boxing ~30MB untuk 120 detik
         val chunks = ArrayList<FloatArray>(2048)
-        val calibChunks = ArrayList<FloatArray>()
+        var calibCount = 0
         val startMs = System.currentTimeMillis()
 
         val minBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
@@ -94,16 +60,13 @@ class AudioRecorder(private val context: Context) {
             while (System.currentTimeMillis() < calibEnd) {
                 val n = recorder.read(buffer, 0, FRAMES_PER_BUFFER, AudioRecord.READ_BLOCKING)
                 if (n > 0) {
-                    val chunk = buffer.copyOf(n)
-                    chunks.add(chunk)
-                    calibChunks.add(chunk)
+                    chunks.add(buffer.copyOf(n))
+                    calibCount++
                 }
             }
-            val noiseFloor = if (calibChunks.isNotEmpty()) {
-                val flat = flattenChunks(calibChunks)
-                calculateRms(flat)
+            val noiseFloor = if (calibCount > 0) {
+                calculateRms(flattenChunks(chunks.subList(0, calibCount)))
             } else 0f
-            // Threshold = 5x noise floor, minimum 0.015
             val threshold = maxOf(noiseFloor * 5f, MIN_SILENCE_THRESHOLD)
             Log.i(TAG, "Noise floor: $noiseFloor  threshold: $threshold")
 

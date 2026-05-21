@@ -100,11 +100,9 @@ class MainViewModel(
                 )
             }
             try {
-                // Record audio
                 val result = withContext(Dispatchers.IO) { recorder.recordUntilSilence() }
                 val durationSec = (result.durationMs / 1000).toInt()
 
-                // Transcribe
                 _state.update { it.copy(step = ProcessingStep.TRANSCRIBING, durationSeconds = durationSec) }
                 val transcriptResult: TranscriptResult = withContext(Dispatchers.IO) {
                     stt?.transcribe(result.samples)
@@ -121,10 +119,9 @@ class MainViewModel(
                     return@launch
                 }
 
-                // Show timestamped transcript to user; send plain text to LLM
+                // timestampedText untuk tampilan user; plainText ke LLM agar tidak ada noise "[0:03]"
                 _state.update { it.copy(transcript = transcriptResult.timestampedText, step = ProcessingStep.SUMMARIZING) }
 
-                // Summarize with streaming (use plain text for cleaner LLM input)
                 val sb = StringBuilder()
                 llm?.summarizeStreaming(transcriptResult.plainText)?.collect { chunk ->
                     sb.append(chunk)
@@ -136,7 +133,6 @@ class MainViewModel(
 
                 val finalSummary = sb.toString().trim()
 
-                // Save to DB (store timestamped transcript for history view)
                 val title = generateTitle(transcriptResult.plainText)
                 val entity = SummaryEntity(
                     title = title,

@@ -65,7 +65,7 @@ class SherpaOnnxSTT(private val modelDir: File) {
     }
 
     private fun buildTimestampedText(tokens: Array<String>, timestamps: FloatArray): String {
-        data class Segment(val startTime: Float, val text: StringBuilder = StringBuilder())
+        class Segment(val startTime: Float, val text: StringBuilder = StringBuilder())
 
         val segments = mutableListOf<Segment>()
         var current: Segment? = null

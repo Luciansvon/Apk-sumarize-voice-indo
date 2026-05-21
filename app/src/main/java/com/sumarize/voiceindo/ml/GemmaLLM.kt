@@ -14,7 +14,6 @@ class GemmaLLM(private val context: Context, private val modelFile: File) {
 
     private var llm: LlmInference? = null
 
-    // Routes inference results to the active callbackFlow
     @Volatile private var resultSink: ((String?, Boolean) -> Unit)? = null
 
     fun initialize() {
@@ -43,11 +42,6 @@ class GemmaLLM(private val context: Context, private val modelFile: File) {
         // Hanya null-kan resultSink kalau kita masih pemiliknya —
         // cegah awaitClose dari call lama menimpa resultSink milik call baru
         awaitClose { if (resultSink === mySink) resultSink = null }
-    }
-
-    suspend fun summarize(transcript: String): String {
-        val llmInstance = llm ?: error("LLM not initialized — call initialize() first")
-        return llmInstance.generateResponse(buildPrompt(transcript))
     }
 
     private fun buildPrompt(transcript: String): String {

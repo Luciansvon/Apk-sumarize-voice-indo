@@ -67,9 +67,10 @@ class ModelDownloader(private val context: Context) {
                         val combined = totalDownloaded + progress.bytesDownloaded
                         emit(DownloadResult.Progress(DownloadProgress(combined, WHISPER_TOTAL_BYTES)))
                     }
-                    tmpFile.renameTo(destFile)
+                    if (!tmpFile.renameTo(destFile))
+                        throw java.io.IOException("Gagal rename ${tmpFile.name} → ${destFile.name}")
                 } catch (e: Exception) {
-                    tmpFile.delete()  // jangan tinggalkan file setengah jadi
+                    tmpFile.delete()
                     throw e
                 }
                 totalDownloaded += destFile.length()
@@ -89,9 +90,10 @@ class ModelDownloader(private val context: Context) {
                 downloadFile(GEMMA_URL, tmpFile) { progress ->
                     emit(DownloadResult.Progress(progress))
                 }
-                tmpFile.renameTo(gemmaModelFile)
+                if (!tmpFile.renameTo(gemmaModelFile))
+                    throw java.io.IOException("Gagal rename ${tmpFile.name} → ${gemmaModelFile.name}")
             } catch (e: Exception) {
-                tmpFile.delete()  // jangan tinggalkan file setengah jadi
+                tmpFile.delete()
                 throw e
             }
             emit(DownloadResult.Success)
