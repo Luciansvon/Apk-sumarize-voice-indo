@@ -14,11 +14,17 @@ class GemmaLLM(private val context: Context, private val modelFile: File) {
 
     private var llm: LlmInference? = null
 
+    // Routes inference results to the active callbackFlow
+    @Volatile private var resultSink: ((String?, Boolean) -> Unit)? = null
+
     fun initialize() {
         val options = LlmInference.LlmInferenceOptions.builder()
             .setModelPath(modelFile.absolutePath)
             .setMaxTokens(1024)
             .setMaxTopK(40)
+            .setResultListener { partialResult, done ->
+                resultSink?.invoke(partialResult, done)
+            }
             .build()
         llm = LlmInference.createFromOptions(context, options)
         Log.i(TAG, "Gemma 3 1B initialized")
@@ -26,13 +32,14 @@ class GemmaLLM(private val context: Context, private val modelFile: File) {
 
     fun summarizeStreaming(transcript: String): Flow<String> = callbackFlow {
         val llmInstance = llm ?: error("LLM not initialized — call initialize() first")
-        val prompt = buildPrompt(transcript)
 
-        llmInstance.generateResponseAsync(prompt) { partialResult, done ->
-            if (partialResult != null) trySend(partialResult)
+        resultSink = { partial, done ->
+            if (!partial.isNullOrEmpty()) trySend(partial)
             if (done) close()
         }
-        awaitClose()
+
+        llmInstance.generateResponseAsync(buildPrompt(transcript))
+        awaitClose { resultSink = null }
     }
 
     suspend fun summarize(transcript: String): String {
@@ -62,6 +69,7 @@ $trimmed
     fun isReady(): Boolean = llm != null
 
     fun release() {
+        resultSink = null
         llm?.close()
         llm = null
         Log.i(TAG, "Gemma LLM released")

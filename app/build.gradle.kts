@@ -72,7 +72,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
 
     // MediaPipe LLM Inference (Gemma 3 1B)
-    implementation("com.google.mediapipe:tasks-genai:0.10.20")
+    implementation("com.google.mediapipe:tasks-genai:0.10.14")
 
     // sherpa-onnx local AAR (download via download_libs.sh first)
     // Note: sherpa-onnx AAR bundles libonnxruntime.so — do NOT add onnxruntime-android here

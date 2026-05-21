@@ -26,9 +26,6 @@ jobs:
           distribution: "temurin"
           java-version: "17"
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
@@ -52,8 +49,32 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: ${{ runner.os }}-gradle-
 
+      - name: Check Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls $ANDROID_HOME/platforms/ | tail -5
+          ls $ANDROID_HOME/build-tools/ | tail -5
+
       - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace --no-daemon
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --info --no-daemon 2>&1 | tee /tmp/build.log
+          EXIT=${PIPESTATUS[0]}
+          if [ $EXIT -ne 0 ]; then
+            echo "=== BUILD FAILED — First 80 lines ==="
+            head -80 /tmp/build.log
+            echo "=== BUILD FAILED — Error section ==="
+            grep -A 20 "FAILURE\|What went wrong\|Task.*FAILED\|error:" /tmp/build.log | head -60
+          fi
+          exit $EXIT
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ github.sha }}
+          path: /tmp/build.log
+          retention-days: 7
 
       - name: Rename APK
         run: |
