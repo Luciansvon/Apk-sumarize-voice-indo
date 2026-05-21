@@ -18,12 +18,7 @@ class AppPreferences(private val context: Context) {
 
         data class ModelOption(val id: String, val label: String)
         val AVAILABLE_MODELS = listOf(
-            // Gratis
-            ModelOption("deepseek/deepseek-v4-flash:free",         "DeepSeek V4 Flash (Gratis)"),
-            ModelOption("deepseek/deepseek-r1:free",               "DeepSeek R1 (Gratis)"),
-            ModelOption("meta-llama/llama-3.3-70b-instruct:free",  "Llama 3.3 70B (Gratis)"),
-            ModelOption("mistralai/mistral-7b-instruct:free",      "Mistral 7B (Gratis)"),
-            // Berbayar — murah & stabil
+            ModelOption("deepseek/deepseek-v4-flash",              "DeepSeek V4 Flash"),
             ModelOption("microsoft/phi-4",                         "Phi 4 — Microsoft"),
             ModelOption("openai/gpt-oss-120b",                     "GPT-OSS 120B — OpenAI"),
             ModelOption("z-ai/glm-4.5-air",                        "GLM 4.5 Air — Z.AI"),
@@ -31,7 +26,7 @@ class AppPreferences(private val context: Context) {
             ModelOption("qwen/qwen-plus-0728",                     "Qwen Plus 0728"),
             ModelOption("openai/gpt-3.5-turbo",                    "GPT-3.5 Turbo"),
             ModelOption("mistralai/mistral-large-2411",            "Mistral Large 2411"),
-            ModelOption("anthropic/claude-opus-4",                 "Claude Opus 4 (Premium)"),
+            ModelOption("anthropic/claude-opus-4",                 "Claude Opus 4"),
         )
         val AVAILABLE_STT_MODELS = listOf(
             ModelOption("openai/whisper-1",                    "Whisper V1 — Stabil ($0.006/mnt)"),

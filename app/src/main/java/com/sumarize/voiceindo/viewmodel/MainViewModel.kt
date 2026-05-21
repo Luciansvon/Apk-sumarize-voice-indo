@@ -226,8 +226,16 @@ class MainViewModel(
                         }
                         return@launch
                     }
-                    val transcribed = withContext(Dispatchers.IO) {
-                        OpenRouterClient(apiKey, selectedModel).transcribeAudio(result.samples, sttModel)
+                    // Coba online STT; fallback ke Whisper lokal jika gagal
+                    val transcribed = runCatching {
+                        withContext(Dispatchers.IO) {
+                            OpenRouterClient(apiKey, selectedModel).transcribeAudio(result.samples, sttModel)
+                        }
+                    }.getOrElse { e ->
+                        val fallback = withContext(Dispatchers.IO) {
+                            stt?.transcribe(result.samples)?.plainText
+                        }
+                        fallback ?: throw e   // lempar error asli jika lokal juga tidak ada
                     }
                     plainText = transcribed
                     displayText = transcribed
