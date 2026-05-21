@@ -11,6 +11,7 @@ import com.sumarize.voiceindo.data.repository.SummaryRepository
 import com.sumarize.voiceindo.ml.GemmaLLM
 import com.sumarize.voiceindo.ml.ModelDownloader
 import com.sumarize.voiceindo.ml.SherpaOnnxSTT
+import com.sumarize.voiceindo.ml.TranscriptResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -101,12 +102,12 @@ class MainViewModel(
 
                 // Transcribe
                 _state.update { it.copy(step = ProcessingStep.TRANSCRIBING, durationSeconds = durationSec) }
-                val transcript = withContext(Dispatchers.IO) {
+                val transcriptResult: TranscriptResult = withContext(Dispatchers.IO) {
                     stt?.transcribe(result.samples)
                         ?: error("STT belum siap")
                 }
 
-                if (transcript.isBlank()) {
+                if (transcriptResult.plainText.isBlank()) {
                     _state.update {
                         it.copy(
                             step = ProcessingStep.ERROR,
@@ -116,11 +117,12 @@ class MainViewModel(
                     return@launch
                 }
 
-                _state.update { it.copy(transcript = transcript, step = ProcessingStep.SUMMARIZING) }
+                // Show timestamped transcript to user; send plain text to LLM
+                _state.update { it.copy(transcript = transcriptResult.timestampedText, step = ProcessingStep.SUMMARIZING) }
 
-                // Summarize with streaming
+                // Summarize with streaming (use plain text for cleaner LLM input)
                 val sb = StringBuilder()
-                llm?.summarizeStreaming(transcript)?.collect { chunk ->
+                llm?.summarizeStreaming(transcriptResult.plainText)?.collect { chunk ->
                     sb.append(chunk)
                     _state.update { it.copy(streamingSummary = sb.toString()) }
                 } ?: run {
@@ -130,11 +132,11 @@ class MainViewModel(
 
                 val finalSummary = sb.toString().trim()
 
-                // Save to DB
-                val title = generateTitle(transcript)
+                // Save to DB (store timestamped transcript for history view)
+                val title = generateTitle(transcriptResult.plainText)
                 val entity = SummaryEntity(
                     title = title,
-                    transcript = transcript,
+                    transcript = transcriptResult.timestampedText,
                     summary = finalSummary,
                     durationSeconds = durationSec
                 )
