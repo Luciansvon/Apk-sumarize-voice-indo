@@ -26,6 +26,7 @@ enum class ProcessingStep {
 
 data class MainUiState(
     val step: ProcessingStep = ProcessingStep.IDLE,
+    val liveTranscript: String = "",
     val transcript: String = "",
     val summary: String = "",
     val streamingSummary: String = "",
@@ -47,6 +48,8 @@ class MainViewModel(
 
     private var stt: SherpaOnnxSTT? = null
     private var llm: GemmaLLM? = null
+
+    @Volatile private var isTranscribingChunk = false
 
     init {
         initModels()
@@ -90,9 +93,11 @@ class MainViewModel(
             current == ProcessingStep.SUMMARIZING) return
 
         viewModelScope.launch {
+            isTranscribingChunk = false
             _state.update {
                 it.copy(
                     step = ProcessingStep.RECORDING,
+                    liveTranscript = "",
                     transcript = "",
                     summary = "",
                     streamingSummary = "",
@@ -100,7 +105,27 @@ class MainViewModel(
                 )
             }
             try {
-                val result = withContext(Dispatchers.IO) { recorder.recordUntilSilence() }
+                val result = withContext(Dispatchers.IO) {
+                    recorder.recordUntilSilence { chunkSamples ->
+                        if (!isTranscribingChunk) {
+                            isTranscribingChunk = true
+                            viewModelScope.launch(Dispatchers.IO) {
+                                try {
+                                    val text = stt?.transcribe(chunkSamples)?.plainText?.trim() ?: ""
+                                    if (text.isNotBlank()) {
+                                        _state.update { s ->
+                                            val joined = if (s.liveTranscript.isBlank()) text
+                                                         else "${s.liveTranscript} $text"
+                                            s.copy(liveTranscript = joined)
+                                        }
+                                    }
+                                } finally {
+                                    isTranscribingChunk = false
+                                }
+                            }
+                        }
+                    }
+                }
                 val durationSec = (result.durationMs / 1000).toInt()
 
                 _state.update { it.copy(step = ProcessingStep.TRANSCRIBING, durationSeconds = durationSec) }
@@ -164,6 +189,7 @@ class MainViewModel(
         _state.update {
             it.copy(
                 step = ProcessingStep.IDLE,
+                liveTranscript = "",
                 transcript = "",
                 summary = "",
                 streamingSummary = "",

@@ -23,6 +23,7 @@ private const val MIN_SILENCE_THRESHOLD = 0.015f  // absolute minimum
 private const val MIN_RECORDING_MS = 1500L
 private const val MAX_RECORDING_MS = 120_000L
 private const val NOISE_CALIBRATION_MS = 400L
+private const val PREVIEW_CHUNK_MS = 5000L  // emit preview chunk every 5 s
 
 data class RecordingResult(val samples: FloatArray, val durationMs: Long)
 
@@ -37,7 +38,9 @@ class AudioRecorder(private val context: Context) {
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
 
-    suspend fun recordUntilSilence(): RecordingResult {
+    suspend fun recordUntilSilence(
+        onChunkAvailable: ((FloatArray) -> Unit)? = null
+    ): RecordingResult {
         stopRequested = false
         // Kumpulkan chunk FloatArray, bukan Float satu-satu — hindari boxing ~30MB untuk 120 detik
         val chunks = ArrayList<FloatArray>(2048)
@@ -72,6 +75,8 @@ class AudioRecorder(private val context: Context) {
 
             // Phase 2: main recording with VAD
             var silenceStart: Long? = null
+            var previewStartIdx = chunks.size  // start after calibration data
+            var lastPreviewMs = System.currentTimeMillis()
 
             while (coroutineContext.isActive && !stopRequested) {
                 val read = recorder.read(buffer, 0, FRAMES_PER_BUFFER, AudioRecord.READ_BLOCKING)
@@ -95,6 +100,16 @@ class AudioRecorder(private val context: Context) {
                         Log.i(TAG, "Silence detected after ${elapsed}ms, stopping")
                         break
                     }
+                }
+
+                // Emit audio chunk for live preview every PREVIEW_CHUNK_MS
+                if (onChunkAvailable != null && (now - lastPreviewMs) >= PREVIEW_CHUNK_MS) {
+                    val newChunks = chunks.subList(previewStartIdx, chunks.size).toList()
+                    if (newChunks.isNotEmpty()) {
+                        onChunkAvailable(flattenChunks(newChunks))
+                        previewStartIdx = chunks.size
+                    }
+                    lastPreviewMs = now
                 }
             }
         } finally {
