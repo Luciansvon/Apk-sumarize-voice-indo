@@ -16,16 +16,17 @@ class AppPreferences(private val context: Context) {
 
         data class ModelOption(val id: String, val label: String)
         val AVAILABLE_MODELS = listOf(
-            // Gratis — verified free May 2026
-            ModelOption("deepseek/deepseek-r1:free", "DeepSeek R1 (Gratis)"),
-            ModelOption("deepseek/deepseek-chat-v3.1:free", "DeepSeek Chat V3.1 (Gratis)"),
-            ModelOption("qwen/qwen3-235b-a22b:free", "Qwen3 235B (Gratis)"),
-            ModelOption("meta-llama/llama-4-scout:free", "Llama 4 Scout (Gratis)"),
-            ModelOption("meta-llama/llama-4-maverick:free", "Llama 4 Maverick (Gratis)"),
-            ModelOption("mistralai/mistral-7b-instruct:free", "Mistral 7B (Gratis)"),
+            // Gratis — verified working text generation, May 2026
+            ModelOption("deepseek/deepseek-r1:free",               "DeepSeek R1 (Gratis)"),
+            ModelOption("deepseek/deepseek-chat-v3.1:free",        "DeepSeek Chat V3.1 (Gratis)"),
+            ModelOption("meta-llama/llama-3.3-70b-instruct:free",  "Llama 3.3 70B (Gratis)"),
+            ModelOption("meta-llama/llama-4-maverick:free",        "Llama 4 Maverick (Gratis)"),
+            ModelOption("qwen/qwen-2.5-72b-instruct:free",         "Qwen 2.5 72B (Gratis)"),
+            ModelOption("google/gemma-3-12b-it:free",              "Gemma 3 12B (Gratis)"),
+            ModelOption("mistralai/mistral-7b-instruct:free",      "Mistral 7B (Gratis)"),
             // Berbayar
-            ModelOption("anthropic/claude-3-haiku", "Claude 3 Haiku"),
-            ModelOption("openai/gpt-4o-mini", "GPT-4o Mini"),
+            ModelOption("anthropic/claude-3-haiku",                "Claude 3 Haiku"),
+            ModelOption("openai/gpt-4o-mini",                      "GPT-4o Mini"),
         )
     }
 
