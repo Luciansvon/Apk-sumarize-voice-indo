@@ -49,12 +49,6 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: ${{ runner.os }}-gradle-
 
-      - name: Check Android SDK
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          ls $ANDROID_HOME/platforms/ | tail -5
-          ls $ANDROID_HOME/build-tools/ | tail -5
-
       - name: Build debug APK
         run: |
           set -o pipefail

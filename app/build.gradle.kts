@@ -10,13 +10,12 @@ android {
 
     defaultConfig {
         applicationId = "com.sumarize.voiceindo"
-        minSdk = 26
+        minSdk = 28
         targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
-        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
     buildTypes {
@@ -72,7 +71,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
 
     // MediaPipe LLM Inference (Gemma 3 1B)
-    implementation("com.google.mediapipe:tasks-genai:0.10.14")
+    implementation("com.google.mediapipe:tasks-genai:0.10.21")
 
     // sherpa-onnx local AAR (download via download_libs.sh first)
     // Note: sherpa-onnx AAR bundles libonnxruntime.so — do NOT add onnxruntime-android here
