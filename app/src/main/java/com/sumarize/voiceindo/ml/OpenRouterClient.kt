@@ -20,45 +20,42 @@ class OpenRouterClient(
 
     fun transcribeAudio(samples: FloatArray, sttModel: String, sampleRate: Int = 16000): String {
         val wavBytes = samples.toWavPcm16(sampleRate)
-        val boundary = "----FormBoundary${System.currentTimeMillis()}"
+        val boundary = "----SumarizeBoundary${System.currentTimeMillis()}"
+
+        // Pre-build seluruh body untuk Content-Length yang akurat
+        val parts = mutableListOf<ByteArray>()
+        fun field(name: String, value: String) {
+            parts.add("--$boundary\r\nContent-Disposition: form-data; name=\"$name\"\r\n\r\n$value\r\n".toByteArray())
+        }
+        field("model", sttModel)
+        field("response_format", "text")   // plain text, tidak perlu parse JSON
+        parts.add("--$boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\nContent-Type: audio/wav\r\n\r\n".toByteArray())
+        parts.add(wavBytes)
+        parts.add("\r\n--$boundary--\r\n".toByteArray())
+        val totalSize = parts.sumOf { it.size }
+
         val url = URL("$BASE_URL/audio/transcriptions")
         val conn = url.openConnection() as HttpURLConnection
         try {
             conn.requestMethod = "POST"
             conn.setRequestProperty("Authorization", "Bearer $apiKey")
             conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+            conn.setRequestProperty("Content-Length", totalSize.toString())
             conn.setRequestProperty("HTTP-Referer", "https://sumarize-voice-indo.app")
             conn.setRequestProperty("X-Title", "Sumarize Voice Indo")
             conn.doOutput = true
             conn.connectTimeout = 15_000
             conn.readTimeout = 120_000
 
-            conn.outputStream.use { os ->
-                fun part(name: String, value: String) {
-                    os.write("--$boundary\r\n".toByteArray())
-                    os.write("Content-Disposition: form-data; name=\"$name\"\r\n\r\n".toByteArray())
-                    os.write("$value\r\n".toByteArray())
-                }
-                part("model", sttModel)
-                part("language", "id")
-                // audio file
-                os.write("--$boundary\r\n".toByteArray())
-                os.write("Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n".toByteArray())
-                os.write("Content-Type: audio/wav\r\n\r\n".toByteArray())
-                os.write(wavBytes)
-                os.write("\r\n".toByteArray())
-                os.write("--$boundary--\r\n".toByteArray())
-            }
+            conn.outputStream.use { os -> parts.forEach { os.write(it) } }
 
             val code = conn.responseCode
             if (code != HttpURLConnection.HTTP_OK) {
-                val errBody = conn.errorStream?.bufferedReader()?.readText() ?: "Unknown"
-                Log.e(TAG, "STT HTTP $code: $errBody")
+                val errBody = conn.errorStream?.bufferedReader()?.readText() ?: "no body"
+                Log.e(TAG, "STT HTTP $code full error: $errBody")
                 throw Exception("STT error $code: ${parseErrorMessage(errBody)}")
             }
-
-            val body = conn.inputStream.bufferedReader().readText()
-            return JSONObject(body).optString("text", "").trim()
+            return conn.inputStream.bufferedReader().readText().trim()
         } finally {
             conn.disconnect()
         }

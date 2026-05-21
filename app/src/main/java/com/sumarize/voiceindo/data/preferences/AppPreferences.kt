@@ -18,11 +18,12 @@ class AppPreferences(private val context: Context) {
 
         data class ModelOption(val id: String, val label: String)
         val AVAILABLE_MODELS = listOf(
-            // Gratis (free tier OpenRouter — bisa kena rate limit)
+            // Gratis
+            ModelOption("deepseek/deepseek-v4-flash:free",         "DeepSeek V4 Flash (Gratis)"),
             ModelOption("deepseek/deepseek-r1:free",               "DeepSeek R1 (Gratis)"),
             ModelOption("meta-llama/llama-3.3-70b-instruct:free",  "Llama 3.3 70B (Gratis)"),
             ModelOption("mistralai/mistral-7b-instruct:free",      "Mistral 7B (Gratis)"),
-            // Berbayar — murah & stabil (butuh kredit OpenRouter)
+            // Berbayar — murah & stabil
             ModelOption("microsoft/phi-4",                         "Phi 4 — Microsoft"),
             ModelOption("openai/gpt-oss-120b",                     "GPT-OSS 120B — OpenAI"),
             ModelOption("z-ai/glm-4.5-air",                        "GLM 4.5 Air — Z.AI"),
@@ -33,8 +34,11 @@ class AppPreferences(private val context: Context) {
             ModelOption("anthropic/claude-opus-4",                 "Claude Opus 4 (Premium)"),
         )
         val AVAILABLE_STT_MODELS = listOf(
-            ModelOption("openai/whisper-large-v3-turbo", "Whisper Large V3 Turbo (Cepat)"),
-            ModelOption("openai/whisper-large-v3",       "Whisper Large V3 (Akurat)"),
+            ModelOption("openai/whisper-1",                    "Whisper V1 — Stabil ($0.006/mnt)"),
+            ModelOption("openai/whisper-large-v3-turbo",       "Whisper V3 Turbo — Cepat ($0.04/jam)"),
+            ModelOption("openai/whisper-large-v3",             "Whisper V3 — Akurat ($0.111/jam)"),
+            ModelOption("mistralai/voxtral-mini-transcribe",   "Voxtral Mini — Mistral ($0.003/mnt)"),
+            ModelOption("qwen/qwen3-asr-flash",                "Qwen3 ASR Flash — Murah"),
         )
     }
 
@@ -42,7 +46,7 @@ class AppPreferences(private val context: Context) {
     val apiKey: Flow<String> = context.dataStore.data.map { it[KEY_API_KEY] ?: "" }
     val selectedModel: Flow<String> = context.dataStore.data.map { it[KEY_MODEL] ?: AVAILABLE_MODELS.first().id }
     val modeChosen: Flow<Boolean> = context.dataStore.data.map { it[KEY_MODE_CHOSEN] ?: false }
-    val sttModel: Flow<String> = context.dataStore.data.map { it[KEY_STT_MODEL] ?: AVAILABLE_STT_MODELS.first().id }
+    val sttModel: Flow<String> = context.dataStore.data.map { it[KEY_STT_MODEL] ?: "openai/whisper-1" }
 
     suspend fun setOnlineMode(v: Boolean) = context.dataStore.edit { it[KEY_ONLINE_MODE] = v }
     suspend fun setApiKey(v: String) = context.dataStore.edit { it[KEY_API_KEY] = v }
