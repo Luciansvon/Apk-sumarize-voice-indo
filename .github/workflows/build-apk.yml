@@ -50,23 +50,16 @@ jobs:
           restore-keys: ${{ runner.os }}-gradle-
 
       - name: Build debug APK
+        run: ./gradlew assembleDebug --no-daemon --no-build-cache 2>&1 | tee /tmp/build.log
+
+      - name: Show Kotlin compiler errors
+        if: failure()
         run: |
-          # GitHub Actions uses bash -eo pipefail by default.
-          # Using || { } so the diagnostic block runs even when gradle fails.
-          set -o pipefail
-          ./gradlew assembleDebug --no-daemon --no-build-cache 2>&1 | tee /tmp/build.log || {
-            echo ""
-            echo "=== KOTLIN COMPILER ERRORS (e: lines) ==="
-            grep "^e: " /tmp/build.log || echo "(no e: lines found)"
-            echo ""
-            echo "=== KSP / ROOM / ANNOTATION ERRORS ==="
-            grep -iE "error:|ksp|schema|annotation|unresolved" /tmp/build.log \
-              | grep -v "^>" | head -40 || echo "(none found)"
-            echo ""
-            echo "=== LAST 60 LINES OF BUILD LOG ==="
-            tail -60 /tmp/build.log
-            exit 1
-          }
+          echo "=== KOTLIN COMPILER ERRORS ==="
+          grep "^e: " /tmp/build.log || echo "(no e: lines found)"
+          echo ""
+          echo "=== LAST 80 LINES OF BUILD LOG ==="
+          tail -80 /tmp/build.log
 
       - name: Upload build log on failure
         if: failure()
