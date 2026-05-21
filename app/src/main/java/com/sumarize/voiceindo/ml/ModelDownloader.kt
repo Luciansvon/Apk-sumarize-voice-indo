@@ -109,7 +109,13 @@ class ModelDownloader(private val context: Context) {
                 val location = c.getHeaderField("Location")
                 c.disconnect()
                 if (location.isNullOrBlank()) throw java.io.IOException("Redirect tanpa Location header")
-                currentUrl = location
+                // Handle relative redirects (e.g. HuggingFace /api/resolve-cache/...)
+                currentUrl = if (location.startsWith("/")) {
+                    val base = URL(currentUrl)
+                    "${base.protocol}://${base.host}$location"
+                } else {
+                    location
+                }
                 conn = null
             } else {
                 if (code != 200) {
