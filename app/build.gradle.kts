@@ -8,6 +8,15 @@ android {
     namespace = "com.sumarize.voiceindo"
     compileSdk = 34
 
+    signingConfigs {
+        create("fixed") {
+            storeFile = file("../debug.keystore")
+            storePassword = "android"
+            keyAlias = "debugkey"
+            keyPassword = "android"
+        }
+    }
+
     defaultConfig {
         applicationId = "com.sumarize.voiceindo"
         minSdk = 28
@@ -19,6 +28,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("fixed")
+        }
         release {
             isMinifyEnabled = true
             proguardFiles(
@@ -76,9 +88,6 @@ dependencies {
     // sherpa-onnx local AAR (download via download_libs.sh first)
     // Note: sherpa-onnx AAR bundles libonnxruntime.so — do NOT add onnxruntime-android here
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
-
-    // tar.bz2 extraction for Whisper model download
-    implementation("org.apache.commons:commons-compress:1.26.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

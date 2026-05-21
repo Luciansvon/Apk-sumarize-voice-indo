@@ -10,14 +10,17 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.zip.GZIPInputStream
-import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 
 private const val TAG = "ModelDownloader"
 
-// sherpa-onnx Whisper base int8: encoder ~72MB + decoder ~3MB + tokens
-private const val WHISPER_URL =
-    "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-base.int8.tar.bz2"
+// Whisper base int8 — HuggingFace public repo (3 files, no archive extraction needed)
+private const val HF_WHISPER_BASE = "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-base/resolve/main"
+private val WHISPER_FILES = listOf(
+    "base-encoder.int8.onnx" to "encoder.int8.onnx",   // ~29 MB
+    "base-decoder.int8.onnx" to "decoder.int8.onnx",   // ~131 MB
+    "base-tokens.txt"        to "tokens.txt"            // ~1 MB
+)
+private const val WHISPER_TOTAL_BYTES = 161_000_000L   // approximate for progress
 
 // Gemma 3 1B int4 LiteRT (.task) — public mirror (no token required)
 private const val GEMMA_URL =
@@ -52,13 +55,17 @@ class ModelDownloader(private val context: Context) {
 
     fun downloadWhisper(): Flow<DownloadResult> = flow {
         try {
-            val tmpFile = File(context.cacheDir, "whisper-base-int8.tar.bz2")
-            downloadFile(WHISPER_URL, tmpFile) { progress ->
-                emit(DownloadResult.Progress(progress))
+            whisperModelDir.mkdirs()
+            var totalDownloaded = 0L
+            for ((srcName, destName) in WHISPER_FILES) {
+                val destFile = File(whisperModelDir, destName)
+                val url = "$HF_WHISPER_BASE/$srcName"
+                downloadFile(url, destFile) { progress ->
+                    val combined = totalDownloaded + progress.bytesDownloaded
+                    emit(DownloadResult.Progress(DownloadProgress(combined, WHISPER_TOTAL_BYTES)))
+                }
+                totalDownloaded += destFile.length()
             }
-            emit(DownloadResult.Progress(DownloadProgress(1, 1, 1f)))
-            extractTarBz2(tmpFile, File(context.filesDir, "models"))
-            tmpFile.delete()
             emit(DownloadResult.Success)
         } catch (e: Exception) {
             Log.e(TAG, "Whisper download failed", e)
@@ -86,10 +93,10 @@ class ModelDownloader(private val context: Context) {
     ) {
         dest.parentFile?.mkdirs()
 
-        // Follow redirects manually — Android's HttpURLConnection may drop cross-domain redirects
+        // Follow redirects manually — HuggingFace and GitHub redirect to CDN across domains
         var currentUrl = urlString
         var conn: HttpURLConnection? = null
-        repeat(10) { attempt ->
+        repeat(10) {
             val c = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 30_000
                 readTimeout = 120_000
@@ -130,42 +137,5 @@ class ModelDownloader(private val context: Context) {
             }
         }
         finalConn.disconnect()
-    }
-
-    private fun extractTarBz2(archive: File, destDir: File) {
-        destDir.mkdirs()
-        // Use Apache Commons Compress via bundled bzip2 support
-        // Falls back to manual extraction if library not available
-        try {
-            val bzInput = org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream(
-                archive.inputStream().buffered()
-            )
-            TarArchiveInputStream(bzInput).use { tar ->
-                var entry = tar.nextTarEntry
-                while (entry != null) {
-                    val outFile = File(destDir, entry.name)
-                    if (entry.isDirectory) {
-                        outFile.mkdirs()
-                    } else {
-                        outFile.parentFile?.mkdirs()
-                        FileOutputStream(outFile).use { tar.copyTo(it) }
-                    }
-                    entry = tar.nextTarEntry
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Extraction via Commons Compress failed, trying fallback", e)
-            extractViaNativeTar(archive, destDir)
-        }
-    }
-
-    private fun extractViaNativeTar(archive: File, destDir: File) {
-        val process = ProcessBuilder("tar", "-xjf", archive.absolutePath, "-C", destDir.absolutePath)
-            .redirectErrorStream(true)
-            .start()
-        val exitCode = process.waitFor()
-        if (exitCode != 0) {
-            throw RuntimeException("tar extraction failed with code $exitCode")
-        }
     }
 }
