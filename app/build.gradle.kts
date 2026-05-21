@@ -25,6 +25,9 @@ android {
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
+        ksp {
+            arg("room.schemaLocation", "$projectDir/schemas")
+        }
     }
 
     buildTypes {
@@ -55,10 +58,6 @@ android {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
         jniLibs { pickFirsts += listOf("**/libc++_shared.so", "**/libonnxruntime.so") }
     }
-}
-
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
