@@ -42,6 +42,12 @@ class MainActivity : ComponentActivity() {
 
                 val startDestination = if (setupState.isReady) "home" else "setup"
 
+                // Satu instance MainViewModel dibagi ke home + settings
+                // agar GemmaLLM tidak di-load dua kali dan menyebabkan crash OOM
+                val mainVm: MainViewModel = viewModel(
+                    factory = MainViewModelFactory(applicationContext, app.database)
+                )
+
                 NavHost(navController = navController, startDestination = startDestination) {
                     composable("setup") {
                         SetupScreen(
@@ -54,9 +60,6 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     composable("home") {
-                        val mainVm: MainViewModel = viewModel(
-                            factory = MainViewModelFactory(applicationContext, app.database)
-                        )
                         HomeScreen(
                             viewModel = mainVm,
                             onNavigateToHistory = { navController.navigate("history") },
@@ -64,9 +67,6 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     composable("settings") {
-                        val mainVm: MainViewModel = viewModel(
-                            factory = MainViewModelFactory(applicationContext, app.database)
-                        )
                         SettingsScreen(
                             viewModel = mainVm,
                             onNavigateBack = { navController.popBackStack() }

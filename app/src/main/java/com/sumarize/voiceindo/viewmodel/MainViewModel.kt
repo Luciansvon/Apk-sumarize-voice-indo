@@ -101,7 +101,9 @@ class MainViewModel(
                     llmInstance.initialize()
                     llm = llmInstance
                 }
-                val ready = stt?.isReady() == true && llm?.isReady() == true
+                // Online mode hanya butuh Whisper (STT). Offline butuh keduanya.
+                val whisperReady = stt?.isReady() == true
+                val ready = whisperReady  // Gemma diperiksa saat summarize, bukan saat init
                 _state.update { it.copy(isModelsReady = ready) }
             } catch (e: Exception) {
                 _state.update { it.copy(errorMessage = "Gagal inisialisasi model: ${e.message}") }
