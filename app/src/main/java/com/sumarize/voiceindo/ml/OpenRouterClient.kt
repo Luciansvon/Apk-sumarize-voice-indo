@@ -100,11 +100,11 @@ class OpenRouterClient(
         sendChatRequest(messagesArr, onChunk)
     }
 
-    fun summarizeStreaming(transcript: String, onChunk: (String) -> Unit) {
+    fun summarizeStreaming(promptContent: String, onChunk: (String) -> Unit) {
         val messagesArr = JSONArray().apply {
             put(JSONObject().apply {
                 put("role", "user")
-                put("content", buildPrompt(transcript))
+                put("content", promptContent)
             })
         }
         sendChatRequest(messagesArr, onChunk)
@@ -180,20 +180,6 @@ class OpenRouterClient(
         }
     }
 
-    private fun buildPrompt(transcript: String): String {
-        val trimmed = transcript.take(3000)
-        return """Kamu adalah asisten ringkasan dalam bahasa Indonesia. Buat ringkasan singkat dan padat dari transkripsi suara berikut.
-
-Format output:
-**Ringkasan:** (1-2 kalimat inti)
-**Poin Penting:**
-- (poin 1)
-- (poin 2)
-- (poin 3, jika ada)
-
-Transkripsi:
-$trimmed"""
-    }
 }
 
 private fun FloatArray.toWavPcm16(sampleRate: Int): ByteArray {

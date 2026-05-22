@@ -15,6 +15,7 @@ class AppPreferences(private val context: Context) {
         private val KEY_MODEL = stringPreferencesKey("openrouter_model")
         private val KEY_MODE_CHOSEN = booleanPreferencesKey("mode_chosen")
         private val KEY_STT_MODEL = stringPreferencesKey("stt_model")
+        private val KEY_TEMPLATE = stringPreferencesKey("recording_template")
 
         data class ModelOption(val id: String, val label: String)
         val AVAILABLE_MODELS = listOf(
@@ -42,10 +43,12 @@ class AppPreferences(private val context: Context) {
     val selectedModel: Flow<String> = context.dataStore.data.map { it[KEY_MODEL] ?: AVAILABLE_MODELS.first().id }
     val modeChosen: Flow<Boolean> = context.dataStore.data.map { it[KEY_MODE_CHOSEN] ?: false }
     val sttModel: Flow<String> = context.dataStore.data.map { it[KEY_STT_MODEL] ?: "openai/whisper-1" }
+    val selectedTemplate: Flow<String> = context.dataStore.data.map { it[KEY_TEMPLATE] ?: "UMUM" }
 
     suspend fun setOnlineMode(v: Boolean) = context.dataStore.edit { it[KEY_ONLINE_MODE] = v }
     suspend fun setApiKey(v: String) = context.dataStore.edit { it[KEY_API_KEY] = v }
     suspend fun setModel(v: String) = context.dataStore.edit { it[KEY_MODEL] = v }
     suspend fun setModeChosen(v: Boolean) = context.dataStore.edit { it[KEY_MODE_CHOSEN] = v }
     suspend fun setSttModel(v: String) = context.dataStore.edit { it[KEY_STT_MODEL] = v }
+    suspend fun setTemplate(v: String) = context.dataStore.edit { it[KEY_TEMPLATE] = v }
 }

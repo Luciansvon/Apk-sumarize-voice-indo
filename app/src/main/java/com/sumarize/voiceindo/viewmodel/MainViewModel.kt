@@ -45,7 +45,8 @@ data class MainUiState(
     val currentAmplitude: Float = 0f,
     val isOnlineMode: Boolean = false,
     val chatMessages: List<ChatMessage> = emptyList(),
-    val isChatStreaming: Boolean = false
+    val isChatStreaming: Boolean = false,
+    val selectedTemplate: RecordingTemplate = RecordingTemplate.UMUM
 )
 
 class MainViewModel(
@@ -76,10 +77,15 @@ class MainViewModel(
                 _state.update { cur ->
                     cur.copy(
                         isOnlineMode = online,
-                        // Online mode tidak perlu model lokal sama sekali
                         isModelsReady = if (online) true else (stt?.isReady() == true)
                     )
                 }
+            }
+        }
+        viewModelScope.launch {
+            prefs.selectedTemplate.collect { name ->
+                val template = RecordingTemplate.entries.find { it.name == name } ?: RecordingTemplate.UMUM
+                _state.update { it.copy(selectedTemplate = template) }
             }
         }
     }
@@ -98,6 +104,11 @@ class MainViewModel(
 
     fun setSttModel(m: String) {
         viewModelScope.launch { prefs.setSttModel(m) }
+    }
+
+    fun setTemplate(template: RecordingTemplate) {
+        _state.update { it.copy(selectedTemplate = template) }
+        viewModelScope.launch { prefs.setTemplate(template.name) }
     }
 
     suspend fun getApiKey(): String = prefs.apiKey.first()
@@ -266,17 +277,19 @@ class MainViewModel(
 
                 _state.update { it.copy(transcript = displayText, step = ProcessingStep.SUMMARIZING) }
 
+                val template = _state.value.selectedTemplate
+                val summaryPrompt = template.buildSummaryPrompt(plainText)
                 val sb = StringBuilder()
 
                 if (onlineMode) {
                     withContext(Dispatchers.IO) {
-                        OpenRouterClient(apiKey, selectedModel).summarizeStreaming(plainText) { chunk ->
+                        OpenRouterClient(apiKey, selectedModel).summarizeStreaming(summaryPrompt) { chunk ->
                             sb.append(chunk)
                             _state.update { it.copy(streamingSummary = sb.toString()) }
                         }
                     }
                 } else {
-                    llm?.summarizeStreaming(plainText)?.collect { chunk ->
+                    llm?.summarizeStreaming(summaryPrompt)?.collect { chunk ->
                         sb.append(chunk)
                         _state.update { it.copy(streamingSummary = sb.toString()) }
                     } ?: run {

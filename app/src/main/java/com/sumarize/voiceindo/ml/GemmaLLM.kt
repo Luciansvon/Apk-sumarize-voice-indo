@@ -29,10 +29,10 @@ class GemmaLLM(private val context: Context, private val modelFile: File) {
     // Non-streaming: generateResponse() properly decodes the output.
     // generateResponseAsync with ProgressListener returns raw tokenizer strings
     // (<unused>, <pad>, etc.) for some model variants — sync avoids this.
-    fun summarizeStreaming(transcript: String): Flow<String> = flow {
+    fun summarizeStreaming(promptContent: String): Flow<String> = flow {
         val llmInstance = llm ?: error("LLM not initialized — call initialize() first")
         val raw = withContext(Dispatchers.IO) {
-            llmInstance.generateResponse(buildPrompt(transcript))
+            llmInstance.generateResponse(wrapGemmaPrompt(promptContent))
         }
         val clean = raw.filterSpecialTokens()
         Log.i(TAG, "Generated ${raw.length} chars, ${clean.length} after filter")
@@ -86,24 +86,8 @@ class GemmaLLM(private val context: Context, private val modelFile: File) {
             .replace(Regex("\n{3,}"), "\n\n")
             .trim()
 
-    private fun buildPrompt(transcript: String): String {
-        val trimmed = transcript.take(3000)
-        return """<start_of_turn>user
-Kamu adalah asisten ringkasan dalam bahasa Indonesia. Buat ringkasan singkat dan padat dari transkripsi suara berikut.
-
-Format output:
-**Ringkasan:** (1-2 kalimat inti)
-**Poin Penting:**
-- (poin 1)
-- (poin 2)
-- (poin 3, jika ada)
-
-Transkripsi:
-$trimmed
-<end_of_turn>
-<start_of_turn>model
-"""
-    }
+    private fun wrapGemmaPrompt(content: String): String =
+        "<start_of_turn>user\n$content\n<end_of_turn>\n<start_of_turn>model\n"
 
     fun isReady(): Boolean = llm != null
 

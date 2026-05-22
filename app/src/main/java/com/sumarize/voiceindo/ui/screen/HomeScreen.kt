@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -35,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import com.sumarize.voiceindo.viewmodel.ChatMessage
 import com.sumarize.voiceindo.viewmodel.MainViewModel
 import com.sumarize.voiceindo.viewmodel.ProcessingStep
+import com.sumarize.voiceindo.viewmodel.RecordingTemplate
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -84,11 +86,19 @@ fun HomeScreen(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(24.dp))
 
             StatusBadge(step = state.step)
 
-            Spacer(Modifier.height(48.dp))
+            if (state.step == ProcessingStep.IDLE) {
+                Spacer(Modifier.height(16.dp))
+                TemplateSelector(
+                    selected = state.selectedTemplate,
+                    onSelect = { viewModel.setTemplate(it) }
+                )
+            }
+
+            Spacer(Modifier.height(32.dp))
 
             RecordButton(
                 step = state.step,
@@ -218,6 +228,35 @@ fun HomeScreen(
             }
 
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun TemplateSelector(
+    selected: RecordingTemplate,
+    onSelect: (RecordingTemplate) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Jenis Rekaman",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            RecordingTemplate.entries.forEach { template ->
+                FilterChip(
+                    selected = template == selected,
+                    onClick = { onSelect(template) },
+                    label = { Text(template.displayName) }
+                )
+            }
         }
     }
 }
