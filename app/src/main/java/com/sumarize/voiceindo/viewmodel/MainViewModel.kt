@@ -111,6 +111,12 @@ class MainViewModel(
         viewModelScope.launch { prefs.setTemplate(template.name) }
     }
 
+    fun setSpeakerDiarization(v: Boolean) {
+        viewModelScope.launch { prefs.setSpeakerDiarization(v) }
+    }
+
+    suspend fun getSpeakerDiarization(): Boolean = prefs.speakerDiarization.first()
+
     suspend fun getApiKey(): String = prefs.apiKey.first()
 
     suspend fun getSelectedModel(): String = prefs.selectedModel.first()
@@ -168,6 +174,7 @@ class MainViewModel(
             val apiKey = prefs.apiKey.first()
             val selectedModel = prefs.selectedModel.first()
             val sttModel = prefs.sttModel.first()
+            val diarizationEnabled = prefs.speakerDiarization.first()
 
             isTranscribingChunk = false
             _state.update {
@@ -275,10 +282,25 @@ class MainViewModel(
                     return@launch
                 }
 
-                _state.update { it.copy(transcript = displayText, step = ProcessingStep.SUMMARIZING) }
+                // Speaker diarization via LLM (online + toggle on)
+                var transcriptForSummary = plainText
+                var displayForUi = displayText
+                if (onlineMode && diarizationEnabled && apiKey.isNotBlank()) {
+                    val labeled = runCatching {
+                        withContext(Dispatchers.IO) {
+                            OpenRouterClient(apiKey, selectedModel).labelSpeakers(plainText)
+                        }
+                    }.getOrNull()
+                    if (!labeled.isNullOrBlank()) {
+                        transcriptForSummary = labeled
+                        displayForUi = labeled
+                    }
+                }
+
+                _state.update { it.copy(transcript = displayForUi, step = ProcessingStep.SUMMARIZING) }
 
                 val template = _state.value.selectedTemplate
-                val summaryPrompt = template.buildSummaryPrompt(plainText)
+                val summaryPrompt = template.buildSummaryPrompt(transcriptForSummary)
                 val sb = StringBuilder()
 
                 if (onlineMode) {
@@ -308,7 +330,7 @@ class MainViewModel(
                 val title = generateTitle(plainText)
                 val entity = SummaryEntity(
                     title = title,
-                    transcript = displayText,
+                    transcript = displayForUi,
                     summary = finalSummary,
                     durationSeconds = durationSec
                 )

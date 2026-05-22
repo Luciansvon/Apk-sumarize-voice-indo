@@ -43,12 +43,14 @@ fun SettingsScreen(
     var apiKeyVisible by remember { mutableStateOf(false) }
     var dropdownExpanded by remember { mutableStateOf(false) }
     var sttDropdownExpanded by remember { mutableStateOf(false) }
+    var diarizationEnabled by remember { mutableStateOf(false) }
 
     // Load current prefs on first composition
     LaunchedEffect(Unit) {
         apiKeyText = viewModel.getApiKey()
         selectedModelId = viewModel.getSelectedModel()
         selectedSttModelId = viewModel.getSelectedSttModel()
+        diarizationEnabled = viewModel.getSpeakerDiarization()
     }
 
     if (showPrivacyDialog) {
@@ -310,6 +312,34 @@ fun SettingsScreen(
                                     )
                                 }
                             }
+                        }
+
+                        HorizontalDivider()
+
+                        // Speaker diarization toggle (online only)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Label Pembicara",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Otomatis tandai \"Pembicara 1:\", \"Pembicara 2:\" — cocok untuk wawancara & rapat. Menambah ~3-5 detik proses.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = diarizationEnabled,
+                                onCheckedChange = {
+                                    diarizationEnabled = it
+                                    viewModel.setSpeakerDiarization(it)
+                                }
+                            )
                         }
 
                         Text(

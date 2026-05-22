@@ -110,6 +110,49 @@ class OpenRouterClient(
         sendChatRequest(messagesArr, onChunk)
     }
 
+    fun labelSpeakers(transcript: String): String {
+        val sb = StringBuilder()
+        val messagesArr = JSONArray().apply {
+            put(JSONObject().apply {
+                put("role", "user")
+                put("content", buildDiarizationPrompt(transcript))
+            })
+        }
+        sendChatRequest(messagesArr) { chunk -> sb.append(chunk) }
+        return cleanDiarizationOutput(sb.toString().trim(), transcript)
+    }
+
+    private fun buildDiarizationPrompt(transcript: String): String {
+        val trimmed = transcript.take(4000)
+        return """Berikut transkripsi tanpa label pembicara. Identifikasi setiap perubahan pembicara berdasarkan konteks (pertanyaan vs jawaban, perubahan topik, perubahan gaya bahasa). Beri label "Pembicara 1:", "Pembicara 2:" dst. di awal setiap giliran bicara.
+
+Aturan ketat:
+- JANGAN parafrase atau ubah kata-kata aslinya, hanya tambahkan label di awal giliran bicara
+- Jika tidak yakin ada perubahan pembicara, gabung dengan pembicara sebelumnya
+- Jika hanya satu pembicara terdeteksi, cukup beri "Pembicara 1:" di awal transkripsi
+- JANGAN tambahkan komentar, penjelasan, atau header apapun
+- Output HANYA transkripsi dengan label pembicara, satu giliran per baris
+
+Transkripsi:
+$trimmed
+
+Output (transkripsi dengan label pembicara):"""
+    }
+
+    // Strip apologetic preamble jika LLM menambahkan kalimat seperti "Berikut transkripsi..."
+    private fun cleanDiarizationOutput(labeled: String, original: String): String {
+        val lines = labeled.lines()
+        val firstSpeakerIdx = lines.indexOfFirst { it.trim().matches(Regex("^Pembicara\\s+\\d+\\s*:.*")) }
+        return if (firstSpeakerIdx > 0) {
+            lines.drop(firstSpeakerIdx).joinToString("\n").trim()
+        } else if (firstSpeakerIdx == 0) {
+            labeled
+        } else {
+            // LLM tidak memberi label sesuai format — fallback ke transkrip asli dengan label generik
+            "Pembicara 1: $original"
+        }
+    }
+
     private fun sendChatRequest(messages: JSONArray, onChunk: (String) -> Unit) {
         val requestBody = JSONObject().apply {
             put("model", model)

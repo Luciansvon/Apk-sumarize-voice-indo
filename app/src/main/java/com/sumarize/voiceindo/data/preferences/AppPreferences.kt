@@ -16,6 +16,7 @@ class AppPreferences(private val context: Context) {
         private val KEY_MODE_CHOSEN = booleanPreferencesKey("mode_chosen")
         private val KEY_STT_MODEL = stringPreferencesKey("stt_model")
         private val KEY_TEMPLATE = stringPreferencesKey("recording_template")
+        private val KEY_SPEAKER_DIARIZATION = booleanPreferencesKey("speaker_diarization")
 
         data class ModelOption(val id: String, val label: String)
         val AVAILABLE_MODELS = listOf(
@@ -44,6 +45,7 @@ class AppPreferences(private val context: Context) {
     val modeChosen: Flow<Boolean> = context.dataStore.data.map { it[KEY_MODE_CHOSEN] ?: false }
     val sttModel: Flow<String> = context.dataStore.data.map { it[KEY_STT_MODEL] ?: "openai/whisper-1" }
     val selectedTemplate: Flow<String> = context.dataStore.data.map { it[KEY_TEMPLATE] ?: "UMUM" }
+    val speakerDiarization: Flow<Boolean> = context.dataStore.data.map { it[KEY_SPEAKER_DIARIZATION] ?: false }
 
     suspend fun setOnlineMode(v: Boolean) = context.dataStore.edit { it[KEY_ONLINE_MODE] = v }
     suspend fun setApiKey(v: String) = context.dataStore.edit { it[KEY_API_KEY] = v }
@@ -51,4 +53,5 @@ class AppPreferences(private val context: Context) {
     suspend fun setModeChosen(v: Boolean) = context.dataStore.edit { it[KEY_MODE_CHOSEN] = v }
     suspend fun setSttModel(v: String) = context.dataStore.edit { it[KEY_STT_MODEL] = v }
     suspend fun setTemplate(v: String) = context.dataStore.edit { it[KEY_TEMPLATE] = v }
+    suspend fun setSpeakerDiarization(v: Boolean) = context.dataStore.edit { it[KEY_SPEAKER_DIARIZATION] = v }
 }
