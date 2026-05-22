@@ -426,10 +426,15 @@ class MainViewModel(
                     }
                 }
 
-                // Finalize: pending -> assistant
+                // Finalize: pending -> assistant (skip jika kosong)
+                val finalContent = sb.toString().trim()
                 _state.update { s ->
-                    val msgs = s.chatMessages.dropLastWhile { it.role == "assistant_pending" } +
-                        ChatMessage("assistant", sb.toString().trim())
+                    val withoutPending = s.chatMessages.dropLastWhile { it.role == "assistant_pending" }
+                    val msgs = if (finalContent.isNotBlank()) {
+                        withoutPending + ChatMessage("assistant", finalContent)
+                    } else {
+                        withoutPending
+                    }
                     s.copy(chatMessages = msgs, isChatStreaming = false)
                 }
             } catch (e: Exception) {
@@ -454,7 +459,8 @@ class MainViewModel(
             val onlineMode = prefs.isOnlineMode.first()
             val apiKey = prefs.apiKey.first()
             val selectedModel = prefs.selectedModel.first()
-            val history = _state.value.chatRoomMessages
+            // Bersihkan history: hapus error messages & pastikan alternating user/assistant
+            val history = buildCleanChatHistory(_state.value.chatRoomMessages)
             val systemPrompt = "Kamu adalah asisten AI berbahasa Indonesia yang cerdas, membantu, dan ramah. Jawab dengan jelas, akurat, dan natural. Jika tidak tahu, katakan dengan jujur."
 
             val sb = StringBuilder()
@@ -498,9 +504,14 @@ class MainViewModel(
                     }
                 }
 
+                val finalContent = sb.toString().trim()
                 _state.update { s ->
-                    val msgs = s.chatRoomMessages.dropLastWhile { it.role == "assistant_pending" } +
-                        ChatMessage("assistant", sb.toString().trim())
+                    val withoutPending = s.chatRoomMessages.dropLastWhile { it.role == "assistant_pending" }
+                    val msgs = if (finalContent.isNotBlank()) {
+                        withoutPending + ChatMessage("assistant", finalContent)
+                    } else {
+                        withoutPending + ChatMessage("error", "Model tidak menghasilkan respons. Coba kirim ulang.")
+                    }
                     s.copy(chatRoomMessages = msgs, isChatRoomStreaming = false)
                 }
             } catch (e: Exception) {
@@ -513,8 +524,29 @@ class MainViewModel(
         }
     }
 
-    fun clearChatRoom() {
-        _state.update { it.copy(chatRoomMessages = emptyList()) }
+    // Bersihkan history chat: hapus error messages, pastikan alternating user→assistant.
+    // Jika ada dua user turn berurutan (karena AI gagal sebelumnya), ganti dengan yang terbaru.
+    // Ini penting untuk Gemma yang mensyaratkan format user/model yang valid.
+    private fun buildCleanChatHistory(messages: List<ChatMessage>): List<ChatMessage> {
+        val result = mutableListOf<ChatMessage>()
+        for (msg in messages) {
+            when (msg.role) {
+                "user" -> {
+                    if (result.isEmpty() || result.last().role == "assistant") {
+                        result.add(msg)
+                    } else if (result.last().role == "user") {
+                        result[result.size - 1] = msg  // ganti dengan pesan user terbaru
+                    }
+                }
+                "assistant" -> {
+                    if (result.isNotEmpty() && result.last().role == "user") {
+                        result.add(msg)
+                    }
+                }
+                // skip "error", "assistant_pending", dll.
+            }
+        }
+        return result
     }
 
     private fun buildChatSystemPrompt(transcript: String, summary: String): String {
