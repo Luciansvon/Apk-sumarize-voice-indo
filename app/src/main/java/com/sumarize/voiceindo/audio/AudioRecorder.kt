@@ -18,7 +18,7 @@ private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
 private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_FLOAT
 private const val FRAMES_PER_BUFFER = 1024
 
-private const val SILENCE_TIMEOUT_MS = 2500L
+private const val SILENCE_TIMEOUT_MS = 4000L
 private const val MIN_SILENCE_THRESHOLD = 0.015f  // absolute minimum
 private const val MIN_RECORDING_MS = 1500L
 private const val MAX_RECORDING_MS = 120_000L

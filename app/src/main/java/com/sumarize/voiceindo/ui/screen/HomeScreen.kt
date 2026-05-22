@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.History
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.sumarize.voiceindo.viewmodel.ChatMessage
 import com.sumarize.voiceindo.viewmodel.MainViewModel
 import com.sumarize.voiceindo.viewmodel.ProcessingStep
 import kotlinx.coroutines.launch
@@ -189,6 +191,13 @@ fun HomeScreen(
                         Text("Ekspor TXT")
                     }
                 }
+
+                Spacer(Modifier.height(16.dp))
+                ChatSection(
+                    messages = state.chatMessages,
+                    isStreaming = state.isChatStreaming,
+                    onSend = { viewModel.sendChatMessage(it) }
+                )
             }
 
             state.errorMessage?.let { err ->
@@ -438,6 +447,120 @@ private fun ResultCard(
             Text(
                 text = content,
                 style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChatSection(
+    messages: List<ChatMessage>,
+    isStreaming: Boolean,
+    onSend: (String) -> Unit
+) {
+    var input by remember { mutableStateOf("") }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Tanya / Revisi Ringkasan",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            if (messages.isEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Contoh: \"Buat lebih singkat\", \"Tambah poin tentang X\", atau \"Apa keputusan akhirnya?\"",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Spacer(Modifier.height(12.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    messages.forEach { msg ->
+                        ChatBubble(message = msg)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it },
+                    placeholder = { Text("Ketik pertanyaan atau revisi...") },
+                    modifier = Modifier.weight(1f),
+                    enabled = !isStreaming,
+                    maxLines = 3
+                )
+                Spacer(Modifier.width(8.dp))
+                FilledIconButton(
+                    onClick = {
+                        if (input.isNotBlank()) {
+                            onSend(input.trim())
+                            input = ""
+                        }
+                    },
+                    enabled = !isStreaming && input.isNotBlank()
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Kirim")
+                }
+            }
+
+            if (isStreaming) {
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Mengetik...",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatBubble(message: ChatMessage) {
+    val isUser = message.role == "user"
+    val bgColor = if (isUser)
+        MaterialTheme.colorScheme.primary
+    else
+        MaterialTheme.colorScheme.surface
+    val textColor = if (isUser)
+        MaterialTheme.colorScheme.onPrimary
+    else
+        MaterialTheme.colorScheme.onSurface
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+    ) {
+        Surface(
+            shape = RoundedCornerShape(
+                topStart = 12.dp,
+                topEnd = 12.dp,
+                bottomStart = if (isUser) 12.dp else 2.dp,
+                bottomEnd = if (isUser) 2.dp else 12.dp
+            ),
+            color = bgColor,
+            modifier = Modifier.widthIn(max = 280.dp)
+        ) {
+            Text(
+                text = message.content,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = textColor
             )
         }
     }

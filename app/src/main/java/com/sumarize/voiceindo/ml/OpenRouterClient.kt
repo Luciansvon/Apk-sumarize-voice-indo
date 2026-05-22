@@ -77,18 +77,44 @@ class OpenRouterClient(
         return out.toByteArray()
     }
 
-    fun summarizeStreaming(transcript: String, onChunk: (String) -> Unit) {
-        val prompt = buildPrompt(transcript)
+    fun chatStreaming(
+        systemPrompt: String,
+        history: List<com.sumarize.voiceindo.viewmodel.ChatMessage>,
+        onChunk: (String) -> Unit
+    ) {
+        val messagesArr = JSONArray().apply {
+            put(JSONObject().apply {
+                put("role", "system")
+                put("content", systemPrompt)
+            })
+            history.forEach { msg ->
+                // Skip pesan pending yang belum selesai
+                if (msg.role == "user" || msg.role == "assistant") {
+                    put(JSONObject().apply {
+                        put("role", msg.role)
+                        put("content", msg.content)
+                    })
+                }
+            }
+        }
+        sendChatRequest(messagesArr, onChunk)
+    }
 
+    fun summarizeStreaming(transcript: String, onChunk: (String) -> Unit) {
+        val messagesArr = JSONArray().apply {
+            put(JSONObject().apply {
+                put("role", "user")
+                put("content", buildPrompt(transcript))
+            })
+        }
+        sendChatRequest(messagesArr, onChunk)
+    }
+
+    private fun sendChatRequest(messages: JSONArray, onChunk: (String) -> Unit) {
         val requestBody = JSONObject().apply {
             put("model", model)
             put("stream", true)
-            put("messages", JSONArray().apply {
-                put(JSONObject().apply {
-                    put("role", "user")
-                    put("content", prompt)
-                })
-            })
+            put("messages", messages)
         }.toString()
 
         val url = URL("$BASE_URL/chat/completions")

@@ -39,6 +39,46 @@ class GemmaLLM(private val context: Context, private val modelFile: File) {
         if (clean.isNotBlank()) emit(clean)
     }
 
+    fun chatStreaming(
+        systemPrompt: String,
+        history: List<com.sumarize.voiceindo.viewmodel.ChatMessage>
+    ): Flow<String> = flow {
+        val llmInstance = llm ?: error("LLM not initialized — call initialize() first")
+        val raw = withContext(Dispatchers.IO) {
+            llmInstance.generateResponse(buildChatPrompt(systemPrompt, history))
+        }
+        val clean = raw.filterSpecialTokens()
+        Log.i(TAG, "Chat generated ${raw.length} chars, ${clean.length} after filter")
+        if (clean.isNotBlank()) emit(clean)
+    }
+
+    private fun buildChatPrompt(
+        systemPrompt: String,
+        history: List<com.sumarize.voiceindo.viewmodel.ChatMessage>
+    ): String {
+        val filtered = history.filter { it.role == "user" || it.role == "assistant" }
+        if (filtered.isEmpty()) return ""
+
+        val sb = StringBuilder()
+        // Turn pertama: system prompt + pesan user pertama
+        sb.append("<start_of_turn>user\n")
+        sb.append(systemPrompt)
+        sb.append("\n\nPesan: ")
+        sb.append(filtered.first().content)
+        sb.append("\n<end_of_turn>\n")
+
+        // Sisa pesan: alternating
+        filtered.drop(1).forEach { msg ->
+            sb.append("<start_of_turn>")
+            sb.append(if (msg.role == "assistant") "model" else "user")
+            sb.append("\n")
+            sb.append(msg.content)
+            sb.append("\n<end_of_turn>\n")
+        }
+        sb.append("<start_of_turn>model\n")
+        return sb.toString()
+    }
+
     private fun String.filterSpecialTokens(): String =
         replace(Regex("<[^>]{1,50}>"), "")
             .replace(Regex("\\[[^\\]]{1,30}\\]"), "")

@@ -27,6 +27,11 @@ enum class ProcessingStep {
     IDLE, RECORDING, TRANSCRIBING, SUMMARIZING, DONE, ERROR
 }
 
+data class ChatMessage(
+    val role: String,   // "user" atau "assistant"
+    val content: String
+)
+
 data class MainUiState(
     val step: ProcessingStep = ProcessingStep.IDLE,
     val liveTranscript: String = "",
@@ -38,7 +43,9 @@ data class MainUiState(
     val isModelsReady: Boolean = false,
     val recordingSeconds: Int = 0,
     val currentAmplitude: Float = 0f,
-    val isOnlineMode: Boolean = false
+    val isOnlineMode: Boolean = false,
+    val chatMessages: List<ChatMessage> = emptyList(),
+    val isChatStreaming: Boolean = false
 )
 
 class MainViewModel(
@@ -322,9 +329,91 @@ class MainViewModel(
                 transcript = "",
                 summary = "",
                 streamingSummary = "",
-                errorMessage = null
+                errorMessage = null,
+                chatMessages = emptyList()
             )
         }
+    }
+
+    fun sendChatMessage(text: String) {
+        if (text.isBlank() || _state.value.isChatStreaming) return
+        val userMsg = ChatMessage(role = "user", content = text.trim())
+        _state.update { it.copy(
+            chatMessages = it.chatMessages + userMsg,
+            isChatStreaming = true,
+            errorMessage = null
+        )}
+
+        viewModelScope.launch {
+            val onlineMode = prefs.isOnlineMode.first()
+            val apiKey = prefs.apiKey.first()
+            val selectedModel = prefs.selectedModel.first()
+            val current = _state.value
+            val systemPrompt = buildChatSystemPrompt(current.transcript, current.summary)
+            val history = current.chatMessages
+
+            val sb = StringBuilder()
+            try {
+                if (onlineMode) {
+                    if (apiKey.isBlank()) {
+                        _state.update { it.copy(
+                            isChatStreaming = false,
+                            errorMessage = "API key OpenRouter belum di-isi."
+                        )}
+                        return@launch
+                    }
+                    withContext(Dispatchers.IO) {
+                        OpenRouterClient(apiKey, selectedModel).chatStreaming(systemPrompt, history) { chunk ->
+                            sb.append(chunk)
+                            _state.update { s ->
+                                val partial = ChatMessage("assistant", sb.toString())
+                                val msgs = s.chatMessages.dropLastWhile { it.role == "assistant_pending" } + partial.copy(role = "assistant_pending")
+                                s.copy(chatMessages = msgs)
+                            }
+                        }
+                    }
+                } else {
+                    llm?.chatStreaming(systemPrompt, history)?.collect { chunk ->
+                        sb.append(chunk)
+                        _state.update { s ->
+                            val partial = ChatMessage("assistant_pending", sb.toString())
+                            val msgs = s.chatMessages.dropLastWhile { it.role == "assistant_pending" } + partial
+                            s.copy(chatMessages = msgs)
+                        }
+                    } ?: run {
+                        _state.update { it.copy(
+                            isChatStreaming = false,
+                            errorMessage = "LLM lokal belum siap."
+                        )}
+                        return@launch
+                    }
+                }
+
+                // Finalize: pending -> assistant
+                _state.update { s ->
+                    val msgs = s.chatMessages.dropLastWhile { it.role == "assistant_pending" } +
+                        ChatMessage("assistant", sb.toString().trim())
+                    s.copy(chatMessages = msgs, isChatStreaming = false)
+                }
+            } catch (e: Exception) {
+                _state.update { it.copy(
+                    isChatStreaming = false,
+                    errorMessage = "Chat gagal: ${e.message}"
+                )}
+            }
+        }
+    }
+
+    private fun buildChatSystemPrompt(transcript: String, summary: String): String {
+        return """Kamu adalah asisten yang membantu user membahas atau merevisi ringkasan rekaman suara. Jawab dalam bahasa Indonesia.
+
+TRANSKRIPSI ASLI:
+${transcript.take(2500)}
+
+RINGKASAN SAAT INI:
+${summary.take(1500)}
+
+Tugas: jawab pertanyaan user tentang isi rekaman, atau bantu revisi/perbaiki ringkasan sesuai permintaan."""
     }
 
     private fun generateTitle(transcript: String): String {
