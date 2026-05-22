@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
@@ -45,7 +46,8 @@ import java.io.File
 fun HomeScreen(
     viewModel: MainViewModel,
     onNavigateToHistory: () -> Unit,
-    onNavigateToSettings: () -> Unit = {}
+    onNavigateToSettings: () -> Unit = {},
+    onNavigateToChatRoom: () -> Unit = {}
 ) {
     val state by viewModel.state.collectAsState()
     var permissionDenied by remember { mutableStateOf(false) }
@@ -67,6 +69,9 @@ fun HomeScreen(
                     Text("Sumarize Voice", fontWeight = FontWeight.Bold)
                 },
                 actions = {
+                    IconButton(onClick = onNavigateToChatRoom) {
+                        Icon(Icons.Default.Forum, "Chat AI")
+                    }
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(Icons.Default.Settings, "Pengaturan")
                     }

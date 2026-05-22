@@ -46,7 +46,9 @@ data class MainUiState(
     val isOnlineMode: Boolean = false,
     val chatMessages: List<ChatMessage> = emptyList(),
     val isChatStreaming: Boolean = false,
-    val selectedTemplate: RecordingTemplate = RecordingTemplate.UMUM
+    val selectedTemplate: RecordingTemplate = RecordingTemplate.UMUM,
+    val chatRoomMessages: List<ChatMessage> = emptyList(),
+    val isChatRoomStreaming: Boolean = false,
 )
 
 class MainViewModel(
@@ -437,6 +439,82 @@ class MainViewModel(
                 )}
             }
         }
+    }
+
+    fun sendChatRoomMessage(text: String) {
+        if (text.isBlank() || _state.value.isChatRoomStreaming) return
+        val userMsg = ChatMessage(role = "user", content = text.trim())
+        _state.update {
+            it.copy(
+                chatRoomMessages = it.chatRoomMessages + userMsg,
+                isChatRoomStreaming = true
+            )
+        }
+        viewModelScope.launch {
+            val onlineMode = prefs.isOnlineMode.first()
+            val apiKey = prefs.apiKey.first()
+            val selectedModel = prefs.selectedModel.first()
+            val history = _state.value.chatRoomMessages
+            val systemPrompt = "Kamu adalah asisten AI berbahasa Indonesia yang cerdas, membantu, dan ramah. Jawab dengan jelas, akurat, dan natural. Jika tidak tahu, katakan dengan jujur."
+
+            val sb = StringBuilder()
+            try {
+                if (onlineMode) {
+                    if (apiKey.isBlank()) {
+                        _state.update {
+                            it.copy(
+                                chatRoomMessages = it.chatRoomMessages + ChatMessage("error", "API key OpenRouter belum diisi. Buka Pengaturan."),
+                                isChatRoomStreaming = false
+                            )
+                        }
+                        return@launch
+                    }
+                    withContext(Dispatchers.IO) {
+                        OpenRouterClient(apiKey, selectedModel).chatStreaming(systemPrompt, history) { chunk ->
+                            sb.append(chunk)
+                            _state.update { s ->
+                                val msgs = s.chatRoomMessages.dropLastWhile { it.role == "assistant_pending" } +
+                                    ChatMessage("assistant_pending", sb.toString())
+                                s.copy(chatRoomMessages = msgs)
+                            }
+                        }
+                    }
+                } else {
+                    llm?.chatStreaming(systemPrompt, history)?.collect { chunk ->
+                        sb.append(chunk)
+                        _state.update { s ->
+                            val msgs = s.chatRoomMessages.dropLastWhile { it.role == "assistant_pending" } +
+                                ChatMessage("assistant_pending", sb.toString())
+                            s.copy(chatRoomMessages = msgs)
+                        }
+                    } ?: run {
+                        _state.update {
+                            it.copy(
+                                chatRoomMessages = it.chatRoomMessages + ChatMessage("error", "Model Gemma lokal belum siap. Buka Pengaturan untuk mengunduh atau aktifkan Mode Online."),
+                                isChatRoomStreaming = false
+                            )
+                        }
+                        return@launch
+                    }
+                }
+
+                _state.update { s ->
+                    val msgs = s.chatRoomMessages.dropLastWhile { it.role == "assistant_pending" } +
+                        ChatMessage("assistant", sb.toString().trim())
+                    s.copy(chatRoomMessages = msgs, isChatRoomStreaming = false)
+                }
+            } catch (e: Exception) {
+                _state.update { s ->
+                    val msgs = s.chatRoomMessages.dropLastWhile { it.role == "assistant_pending" } +
+                        ChatMessage("error", "Gagal: ${e.message?.take(100)}")
+                    s.copy(chatRoomMessages = msgs, isChatRoomStreaming = false)
+                }
+            }
+        }
+    }
+
+    fun clearChatRoom() {
+        _state.update { it.copy(chatRoomMessages = emptyList()) }
     }
 
     private fun buildChatSystemPrompt(transcript: String, summary: String): String {

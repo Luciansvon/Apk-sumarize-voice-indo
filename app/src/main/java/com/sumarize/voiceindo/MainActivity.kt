@@ -11,6 +11,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.sumarize.voiceindo.ui.screen.ChatRoomScreen
 import com.sumarize.voiceindo.ui.screen.DetailScreen
 import com.sumarize.voiceindo.ui.screen.HistoryScreen
 import com.sumarize.voiceindo.ui.screen.HomeScreen
@@ -78,7 +79,14 @@ class MainActivity : ComponentActivity() {
                         HomeScreen(
                             viewModel = mainVm,
                             onNavigateToHistory = { navController.navigate("history") },
-                            onNavigateToSettings = { navController.navigate("settings") }
+                            onNavigateToSettings = { navController.navigate("settings") },
+                            onNavigateToChatRoom = { navController.navigate("chat_room") }
+                        )
+                    }
+                    composable("chat_room") {
+                        ChatRoomScreen(
+                            viewModel = mainVm,
+                            onNavigateBack = { navController.popBackStack() }
                         )
                     }
                     composable("settings") {
